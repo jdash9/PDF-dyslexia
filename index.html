@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schriftwandler — PDF neu setzen</title>
+ 
+<!-- PDF lesen + PDF schreiben -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+ 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+ 
+<style>
+  :root {
+    --paper: #f4efe4;
+    --paper-2: #ece5d6;
+    --ink: #211d18;
+    --ink-soft: #5c5346;
+    --line: #d8cfbd;
+    --accent: #bf4e30;
+    --accent-dark: #9c3c22;
+    --ok: #4a7c44;
+    --shadow: 0 1px 0 rgba(33,29,24,.04), 0 12px 30px -12px rgba(33,29,24,.22);
+    --display: 'Fraunces', Georgia, serif;
+    --body: 'Spline Sans', system-ui, sans-serif;
+  }
+ 
+  * { box-sizing: border-box; }
+ 
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(191,78,48,.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(74,124,68,.05), transparent 55%),
+      var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+ 
+  /* subtle paper grain */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+ 
+  .wrap {
+    position: relative; z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+ 
+  header { margin-bottom: 36px; }
+  .eyebrow {
+    font-family: var(--body);
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--accent-dark); font-weight: 600; margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(36px, 6vw, 56px);
+    line-height: 1.02;
+    letter-spacing: -.01em;
+    margin: 0 0 16px;
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+  .lead {
+    max-width: 56ch; color: var(--ink-soft); font-size: 16px; margin: 0;
+  }
+ 
+  .card {
+    background: rgba(255,253,248,.7);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 26px;
+    box-shadow: var(--shadow);
+    margin-top: 26px;
+    backdrop-filter: blur(2px);
+  }
+ 
+  /* dropzone */
+  #drop {
+    border: 2px dashed var(--line);
+    border-radius: 16px;
+    padding: 48px 28px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .18s ease, background .18s ease, transform .18s ease;
+    background: rgba(255,253,248,.45);
+  }
+  #drop:hover { border-color: var(--accent); background: rgba(191,78,48,.04); }
+  #drop.drag { border-color: var(--accent); background: rgba(191,78,48,.08); transform: scale(1.006); }
+  #drop .ico {
+    width: 52px; height: 52px; margin: 0 auto 16px;
+    display: grid; place-items: center;
+    border-radius: 50%; background: var(--paper-2); color: var(--accent-dark);
+  }
+  #drop strong { font-size: 18px; font-weight: 600; font-family: var(--display); }
+  #drop .sub { color: var(--ink-soft); font-size: 14px; margin-top: 6px; }
+  #drop .pick { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+ 
+  .hidden { display: none !important; }
+ 
+  .filebar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--paper-2); margin-bottom: 22px;
+  }
+  .filebar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; }
+  .filebar .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filebar .meta { color: var(--ink-soft); font-size: 13px; margin-left: auto; flex: none; }
+  .linkbtn {
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    font-family: var(--body); font-size: 13px; text-decoration: underline;
+    text-underline-offset: 3px; padding: 0; flex: none;
+  }
+ 
+  .controls {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px 22px; margin-bottom: 22px;
+  }
+  .controls .full { grid-column: 1 / -1; }
+  .field label {
+    display: block; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink-soft); font-weight: 600; margin-bottom: 8px;
+  }
+  .field .val { color: var(--ink); font-weight: 600; text-transform: none; letter-spacing: 0; }
+ 
+  select {
+    width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px;
+    appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235c5346' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  select:focus, textarea:focus { outline: 2px solid rgba(191,78,48,.35); outline-offset: 1px; border-color: var(--accent); }
+ 
+  input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+ 
+  textarea {
+    width: 100%; min-height: 220px; resize: vertical;
+    padding: 16px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--paper); color: var(--ink);
+    font-family: 'Spline Sans', monospace; font-size: 14px; line-height: 1.6;
+  }
+  .hint { font-size: 13px; color: var(--ink-soft); margin: 8px 2px 0; }
+ 
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+ 
+  .btn {
+    font-family: var(--body); font-weight: 600; font-size: 15px;
+    padding: 13px 22px; border-radius: 11px; cursor: pointer; border: 1px solid transparent;
+    transition: transform .12s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 8px 20px -8px rgba(191,78,48,.6); }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-primary:disabled { background: #cbb ; opacity: .5; cursor: not-allowed; box-shadow: none; }
+  .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent-dark); }
+ 
+  .status { font-size: 14px; margin-left: 4px; }
+  .status.err { color: var(--accent-dark); font-weight: 500; }
+  .status.ok { color: var(--ok); font-weight: 500; }
+  .status.work { color: var(--ink-soft); }
+ 
+  .spinner {
+    display: inline-block; width: 15px; height: 15px; vertical-align: -2px; margin-right: 7px;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+ 
+  .note {
+    margin-top: 28px; font-size: 13px; color: var(--ink-soft);
+    border-left: 3px solid var(--line); padding: 4px 0 4px 14px;
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+ 
+  @media (max-width: 560px) {
+    .controls { grid-template-columns: 1fr; }
+    .wrap { padding: 40px 18px 80px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">PDF · Schrift neu setzen</p>
+    <h1>Schrift<em>wandler</em></h1>
+    <p class="lead">PDF rein, Text wird ausgelesen und in deiner Wunschschrift neu gesetzt — Größe und Zeilenabstand frei wählbar. Danach als neues PDF wieder raus.</p>
+  </header>
+ 
+  <!-- Schritt 1: Upload -->
+  <div class="card" id="card-upload">
+    <div id="drop">
+      <div class="ico">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>
+        </svg>
+      </div>
+      <strong>PDF hier ablegen</strong>
+      <div class="sub">oder <span class="pick">Datei auswählen</span> — nur PDFs mit Textlayer</div>
+    </div>
+    <input type="file" id="file" accept="application/pdf,.pdf" class="hidden">
+  </div>
+ 
+  <!-- Schritt 2: Bearbeiten -->
+  <div class="card hidden" id="card-edit">
+    <div class="filebar">
+      <span class="dot"></span>
+      <span class="name" id="fname">dokument.pdf</span>
+      <span class="meta" id="fmeta"></span>
+      <button class="linkbtn" id="reset">anderes PDF</button>
+    </div>
+ 
+    <div class="controls">
+      <div class="field">
+        <label for="font">Schriftart</label>
+        <select id="font">
+          <option value="helvetica">Helvetica — sachlich, serifenlos</option>
+          <option value="times">Times — klassisch, mit Serifen</option>
+          <option value="courier">Courier — Schreibmaschine, monospace</option>
+          <option value="opendyslexic" id="opt-od" disabled>OpenDyslexic — lädt …</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="size">Schriftgröße — <span class="val" id="size-val">12 pt</span></label>
+        <input type="range" id="size" min="8" max="28" step="1" value="12">
+      </div>
+      <div class="field">
+        <label for="lh">Zeilenabstand — <span class="val" id="lh-val">1,5</span></label>
+        <input type="range" id="lh" min="100" max="250" step="5" value="150">
+      </div>
+      <div class="field">
+        <label for="margin">Seitenrand — <span class="val" id="margin-val">20 mm</span></label>
+        <input type="range" id="margin" min="10" max="40" step="1" value="20">
+      </div>
+ 
+      <div class="full">
+        <label for="text" style="display:block;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:8px;">Text (vor dem Export noch editierbar)</label>
+        <textarea id="text" spellcheck="false"></textarea>
+        <p class="hint">Tipp: Leerzeilen trennen Absätze. Du kannst hier alles anpassen, was die Extraktion falsch erwischt hat.</p>
+      </div>
+    </div>
+ 
+    <div class="row">
+      <button class="btn btn-primary" id="make">PDF erzeugen &amp; herunterladen</button>
+      <button class="btn btn-ghost" id="recopy">Originaltext wiederherstellen</button>
+      <span class="status" id="status"></span>
+    </div>
+  </div>
+ 
+  <p class="note">
+    <b>Wie es arbeitet:</b> Der Text wird aus dem PDF extrahiert und als sauberer Fließtext neu gesetzt. Spalten, Bilder und exaktes Layout bleiben dabei nicht erhalten — dafür ist das Ergebnis frei in Schrift und Abstand formatierbar. Alles läuft lokal in deinem Browser; nichts wird hochgeladen.
+  </p>
+</div>
+ 
+<script>
+  // ---- PDF.js Worker ----
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+ 
+  const { PDFDocument, StandardFonts } = PDFLib;
+ 
+  // ---- DOM ----
+  const $ = id => document.getElementById(id);
+  const drop = $('drop'), fileInput = $('file');
+  const cardUpload = $('card-upload'), cardEdit = $('card-edit');
+  const fname = $('fname'), fmeta = $('fmeta'), reset = $('reset');
+  const fontSel = $('font'), optOD = $('opt-od');
+  const sizeEl = $('size'), sizeVal = $('size-val');
+  const lhEl = $('lh'), lhVal = $('lh-val');
+  const marginEl = $('margin'), marginVal = $('margin-val');
+  const textEl = $('text'), statusEl = $('status');
+  const makeBtn = $('make'), recopy = $('recopy');
+ 
+  let originalText = '';
+  let baseName = 'dokument';
+ 
+  // ---- OpenDyslexic optional nachladen (bricht nichts, wenn es scheitert) ----
+  let openDyslexicBytes = null;
+  let fontkitLib = null;
+  (async () => {
+    const fkUrls = [
+      'https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js',
+      'https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js'
+    ];
+    const fontUrls = [
+      'https://cdn.jsdelivr.net/gh/antijingoist/open-dyslexic@master/ttf/OpenDyslexic-Regular.ttf',
+      'https://cdn.jsdelivr.net/gh/madjeek-web/open-dyslexic@main/OpenDyslexic-2025/opendyslexic-regular-webfont.ttf'
+    ];
+    try {
+      // fontkit-Skript laden
+      for (const u of fkUrls) {
+        try { await loadScript(u); if (window.fontkit) break; } catch(e) {}
+      }
+      fontkitLib = window.fontkit;
+      if (!fontkitLib) throw new Error('fontkit fehlt');
+ 
+      // Font-Datei laden
+      let buf = null;
+      for (const u of fontUrls) {
+        try {
+          const r = await fetch(u);
+          if (r.ok) { buf = await r.arrayBuffer(); break; }
+        } catch(e) {}
+      }
+      if (!buf) throw new Error('Font nicht erreichbar');
+      openDyslexicBytes = buf;
+ 
+      optOD.disabled = false;
+      optOD.textContent = 'OpenDyslexic — für Legasthenie optimiert';
+    } catch (e) {
+      optOD.textContent = 'OpenDyslexic — nicht verfügbar';
+      // bleibt disabled, Rest funktioniert normal
+    }
+  })();
+ 
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+ 
+  // ---- Slider-Labels ----
+  sizeEl.addEventListener('input', () => sizeVal.textContent = sizeEl.value + ' pt');
+  lhEl.addEventListener('input', () => lhVal.textContent = (lhEl.value/100).toFixed(2).replace('.', ',').replace(/,?0+$/, m => m.includes(',')? '' : m));
+  lhEl.addEventListener('input', () => lhVal.textContent = String(lhEl.value/100).replace('.', ','));
+  marginEl.addEventListener('input', () => marginVal.textContent = marginEl.value + ' mm');
+ 
+  // ---- Upload-Verhalten ----
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('drag');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+  reset.addEventListener('click', () => {
+    cardEdit.classList.add('hidden');
+    cardUpload.classList.remove('hidden');
+    fileInput.value = '';
+    setStatus('', '');
+  });
+  recopy.addEventListener('click', () => { textEl.value = originalText; });
+ 
+  function setStatus(msg, cls) {
+    statusEl.className = 'status ' + (cls || '');
+    statusEl.innerHTML = msg;
+  }
+ 
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' KB';
+    return (bytes/1024/1024).toFixed(1) + ' MB';
+  }
+ 
+  // ---- PDF einlesen + Text extrahieren ----
+  async function handleFile(file) {
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      cardEdit.classList.remove('hidden');
+      cardUpload.classList.add('hidden');
+      fname.textContent = file.name;
+      setStatus('Das ist kein PDF. Bitte eine PDF-Datei wählen.', 'err');
+      return;
+    }
+    baseName = file.name.replace(/\.pdf$/i, '') || 'dokument';
+    fname.textContent = file.name;
+    fmeta.textContent = fmtSize(file.size);
+    cardUpload.classList.add('hidden');
+    cardEdit.classList.remove('hidden');
+    textEl.value = '';
+    setStatus('<span class="spinner"></span>Text wird ausgelesen …', 'work');
+ 
+    try {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      const pages = [];
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        pages.push(itemsToText(content.items));
+        setStatus(`<span class="spinner"></span>Seite ${p} von ${pdf.numPages} …`, 'work');
+      }
+      const text = pages.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+      if (!text) {
+        textEl.value = '';
+        setStatus('Kein Text gefunden — das PDF ist vermutlich gescannt (nur Bilder). Dafür bräuchte es OCR.', 'err');
+        originalText = '';
+        return;
+      }
+      originalText = text;
+      textEl.value = text;
+      setStatus(`Fertig — ${pdf.numPages} Seite${pdf.numPages>1?'n':''} ausgelesen. Schrift wählen und exportieren.`, 'ok');
+    } catch (err) {
+      console.error(err);
+      let msg = 'Das PDF konnte nicht gelesen werden.';
+      if (/password/i.test(err.message || '')) msg = 'Das PDF ist passwortgeschützt — das kann ich nicht öffnen.';
+      setStatus(msg, 'err');
+    }
+  }
+ 
+  // Items einer Seite zu vernünftigem Text mit Zeilen/Absätzen zusammenbauen
+  function itemsToText(items) {
+    if (!items.length) return '';
+    // nach Y (oben->unten), dann X (links->rechts) grob sortieren
+    const rows = [];
+    let cur = null;
+    let lastY = null, lastH = 12;
+    for (const it of items) {
+      if (!it.str && !it.hasEOL) continue;
+      const y = it.transform ? it.transform[5] : 0;
+      const h = it.height || Math.abs(it.transform ? it.transform[3] : 12) || 12;
+      if (h) lastH = h;
+      if (lastY === null || Math.abs(y - lastY) > (lastH * 0.5)) {
+        cur = { y, parts: [] };
+        rows.push(cur);
+        lastY = y;
+      }
+      if (it.str) cur.parts.push(it.str);
+      if (it.hasEOL) lastY = null; // erzwingt neue Zeile beim nächsten Item
+    }
+    // Zeilen zu Text; großer vertikaler Sprung => Absatz (Leerzeile)
+    let out = '';
+    for (let i = 0; i < rows.length; i++) {
+      const line = rows[i].parts.join('').replace(/\s+/g, ' ').trim();
+      if (i > 0) {
+        const gap = rows[i-1].y - rows[i].y;
+        out += (gap > lastH * 1.8) ? '\n\n' : '\n';
+      }
+      out += line;
+    }
+    return out;
+  }
+ 
+  // ---- WinAnsi-Sanitisierung (nur für Standard-Fonts) ----
+  const REPL = {
+    '\u2018':"'", '\u2019':"'", '\u201A':"'", '\u201B':"'",
+    '\u201C':'"', '\u201D':'"', '\u201E':'"', '\u201F':'"',
+    '\u2013':'-', '\u2014':'-', '\u2015':'-', '\u2212':'-',
+    '\u2026':'...', '\u2022':'-', '\u00B7':'-', '\u25CF':'-',
+    '\u00A0':' ', '\u2007':' ', '\u2008':' ', '\u2009':' ', '\u200A':' ', '\u202F':' ',
+    '\u200B':'', '\u00AD':'', '\uFEFF':'',
+    '\uFB00':'ff','\uFB01':'fi','\uFB02':'fl','\uFB03':'ffi','\uFB04':'ffl',
+    '\u2192':'->','\u2190':'<-','\u00AB':'"','\u00BB':'"'
+  };
+  function sanitizeWinAnsi(s) {
+    let out = '';
+    for (const ch of s) {
+      if (REPL[ch] !== undefined) { out += REPL[ch]; continue; }
+      const c = ch.codePointAt(0);
+      if (c <= 0xFF || c === 0x20AC) out += ch; // Latin-1 (inkl. Umlaute) + Euro
+      // sonst: weglassen
+    }
+    return out;
+  }
+  // leichte Reinigung für eingebettete Fonts: nur problematische Steuer-/Nullbreitezeichen
+  function sanitizeSoft(s) {
+    return s.replace(/[\u200B\u00AD\uFEFF]/g, '').replace(/\u00A0/g, ' ');
+  }
+ 
+  // ---- Wortumbruch ----
+  function wrapLine(text, font, size, maxW) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    for (let w of words) {
+      const test = line ? line + ' ' + w : w;
+      let width;
+      try { width = font.widthOfTextAtSize(test, size); } catch(e) { width = 0; }
+      if (width > maxW && line) {
+        lines.push(line);
+        // einzelnes Wort breiter als die Zeile -> hart trennen
+        if (safeWidth(font, w, size) > maxW) {
+          const chunks = hardBreak(w, font, size, maxW);
+          line = chunks.pop();
+          for (const c of chunks) lines.push(c);
+        } else {
+          line = w;
+        }
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+  function safeWidth(font, s, size) {
+    try { return font.widthOfTextAtSize(s, size); } catch(e) { return 0; }
+  }
+  function hardBreak(word, font, size, maxW) {
+    const out = []; let buf = '';
+    for (const ch of word) {
+      const test = buf + ch;
+      if (safeWidth(font, test, size) > maxW && buf) { out.push(buf); buf = ch; }
+      else buf = test;
+    }
+    if (buf) out.push(buf);
+    return out;
+  }
+ 
+  // ---- PDF erzeugen ----
+  makeBtn.addEventListener('click', async () => {
+    const raw = textEl.value;
+    if (!raw.trim()) { setStatus('Kein Text zum Exportieren da.', 'err'); return; }
+ 
+    makeBtn.disabled = true;
+    setStatus('<span class="spinner"></span>PDF wird gebaut …', 'work');
+ 
+    try {
+      const choice = fontSel.value;
+      const size = parseInt(sizeEl.value, 10);
+      const lineHeight = size * (parseInt(lhEl.value, 10) / 100);
+      const marginPt = parseInt(marginEl.value, 10) * 2.83465; // mm -> pt
+ 
+      const doc = await PDFDocument.create();
+      let font, useEmbedded = false;
+ 
+      if (choice === 'opendyslexic' && openDyslexicBytes && fontkitLib) {
+        doc.registerFontkit(fontkitLib);
+        font = await doc.embedFont(openDyslexicBytes, { subset: true });
+        useEmbedded = true;
+      } else {
+        const map = {
+          helvetica: StandardFonts.Helvetica,
+          times: StandardFonts.TimesRoman,
+          courier: StandardFonts.Courier
+        };
+        font = await doc.embedFont(map[choice] || StandardFonts.Helvetica);
+      }
+ 
+      // A4
+      const PW = 595.28, PH = 841.89;
+      const maxW = PW - marginPt * 2;
+      const paraGap = lineHeight * 0.55;
+ 
+      let page = doc.addPage([PW, PH]);
+      let y = PH - marginPt;
+ 
+      const drawLine = (txt) => {
+        if (y - lineHeight < marginPt) { page = doc.addPage([PW, PH]); y = PH - marginPt; }
+        if (txt) {
+          try { page.drawText(txt, { x: marginPt, y: y - size, size, font }); }
+          catch(e) { /* notfalls Zeile überspringen */ }
+        }
+        y -= lineHeight;
+      };
+ 
+      const paragraphs = raw.replace(/\r/g, '').split('\n');
+      for (let para of paragraphs) {
+        para = useEmbedded ? sanitizeSoft(para) : sanitizeWinAnsi(para);
+        if (!para.trim()) { y -= paraGap; continue; }
+        const lines = wrapLine(para.replace(/\s+/g, ' ').trim(), font, size, maxW);
+        for (const ln of lines) drawLine(ln);
+        y -= paraGap;
+      }
+ 
+      const bytes = await doc.save();
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = baseName + '_' + choice + '.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+ 
+      const pageCount = doc.getPageCount();
+      setStatus(`Geschafft — PDF mit ${pageCount} Seite${pageCount>1?'n':''} heruntergeladen.`, 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus('Beim Erzeugen ist etwas schiefgelaufen: ' + (err.message || 'unbekannt'), 'err');
+    } finally {
+      makeBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
