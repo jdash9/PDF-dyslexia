@@ -1,17 +1,25 @@
+/* =============================================================================
+   Readable — styles.css
+   Warm, paper-like "reading workshop" look: cream background, ink text,
+   one terracotta accent. All colours live as CSS variables in :root.
+============================================================================= */
+
 :root {
-  --paper: #f4efe4;
-  --paper-2: #ece5d6;
-  --ink: #211d18;
-  --ink-soft: #5c5346;
-  --line: #d8cfbd;
-  --accent: #bf4e30;
-  --accent-dark: #9c3c22;
-  --ok: #4a7c44;
+  --paper: #f4efe4;        /* page background */
+  --paper-2: #ece5d6;      /* slightly darker panels */
+  --ink: #211d18;          /* main text */
+  --ink-soft: #5c5346;     /* secondary text */
+  --line: #d8cfbd;         /* borders / dividers */
+  --accent: #bf4e30;       /* terracotta accent */
+  --accent-dark: #9c3c22;  /* accent on hover */
+  --ok: #4a7c44;           /* success green */
   --shadow: 0 1px 0 rgba(33,29,24,.04), 0 12px 30px -12px rgba(33,29,24,.22);
-  --display: 'Fraunces', Georgia, serif;
-  --body: 'Spline Sans', system-ui, sans-serif;
+  --display: 'Fraunces', Georgia, serif;          /* headings */
+  --body: 'Spline Sans', system-ui, sans-serif;   /* everything else */
 }
 * { box-sizing: border-box; }
+
+/* Base page: layered radial gradients over the cream base colour. */
 body {
   margin: 0;
   background:
@@ -24,74 +32,91 @@ body {
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
 }
+
+/* Very subtle paper grain laid over everything (inline SVG noise). */
 body::before {
   content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .035;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
+
+/* Centred content column. */
 .wrap { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; padding: 56px 24px 96px; }
 
+/* --- Header --- */
 header { margin-bottom: 30px; }
 .eyebrow { font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent-dark); font-weight: 600; margin: 0 0 14px; }
 h1 { font-family: var(--display); font-weight: 600; font-size: clamp(36px, 6vw, 56px); line-height: 1.02; letter-spacing: -.01em; margin: 0 0 16px; }
-h1 em { font-style: italic; color: var(--accent); }
+h1 em { font-style: italic; color: var(--accent); }   /* the "able" in Readable */
 .lead { max-width: 58ch; color: var(--ink-soft); font-size: 16px; margin: 0; }
 
+/* Card container used for both the upload and the editing views. */
 .card { background: rgba(255,253,248,.7); border: 1px solid var(--line); border-radius: 16px; padding: 26px; box-shadow: var(--shadow); margin-top: 26px; backdrop-filter: blur(2px); }
 
+/* --- Drop zone --- */
 #drop { border: 2px dashed var(--line); border-radius: 16px; padding: 48px 28px; text-align: center; cursor: pointer; transition: border-color .18s, background .18s, transform .18s; background: rgba(255,253,248,.45); }
 #drop:hover { border-color: var(--accent); background: rgba(191,78,48,.04); }
-#drop.drag { border-color: var(--accent); background: rgba(191,78,48,.08); transform: scale(1.006); }
+#drop.drag { border-color: var(--accent); background: rgba(191,78,48,.08); transform: scale(1.006); }  /* while dragging a file over */
 #drop .ico { width: 52px; height: 52px; margin: 0 auto 16px; display: grid; place-items: center; border-radius: 50%; background: var(--paper-2); color: var(--accent-dark); }
 #drop strong { font-size: 18px; font-weight: 600; font-family: var(--display); }
 #drop .sub { color: var(--ink-soft); font-size: 14px; margin-top: 6px; }
 #drop .pick { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 
+/* Utility: hide an element (also hides the real file input). */
 .hidden { display: none !important; }
 
+/* --- Loaded-file bar --- */
 .filebar { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper-2); margin-bottom: 24px; }
 .filebar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; }
 .filebar .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filebar .meta { color: var(--ink-soft); font-size: 13px; margin-left: auto; flex: none; }
 .linkbtn { background: none; border: none; color: var(--accent); cursor: pointer; font-family: var(--body); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; padding: 0; flex: none; }
 
+/* Small uppercase section heading ("Reading aids", "Preview"). */
 .section-label { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; margin: 0 0 14px; }
 
-/* Checkbox reading aids */
+/* --- Reading-aid checkboxes ---
+   The real <input> is hidden; .box is the visible custom checkbox and its
+   checked/hover states are driven via the sibling selector (input ~ .box). */
 .opts { display: grid; gap: 10px; margin-bottom: 26px; }
 .opt { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); cursor: pointer; transition: border-color .15s, background .15s; }
 .opt:hover { border-color: var(--accent); background: rgba(191,78,48,.03); }
-.opt.off { opacity: .55; }
-.opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+.opt.off { opacity: .55; }   /* dimmed when the option is unchecked (set by app.js) */
+.opt input { position: absolute; opacity: 0; width: 0; height: 0; }   /* visually hidden, still accessible */
 .box { width: 24px; height: 24px; flex: none; border-radius: 7px; border: 2px solid var(--line); background: #fff; display: grid; place-items: center; transition: all .15s; margin-top: 1px; }
 .opt:hover .box { border-color: var(--accent); }
-.opt input:checked ~ .box { background: var(--accent); border-color: var(--accent); }
-.box svg { opacity: 0; transform: scale(.5); transition: all .15s; }
+.opt input:checked ~ .box { background: var(--accent); border-color: var(--accent); }   /* checked = filled */
+.box svg { opacity: 0; transform: scale(.5); transition: all .15s; }                     /* the tick mark */
 .opt input:checked ~ .box svg { opacity: 1; transform: scale(1); }
-.opt input:focus-visible ~ .box { outline: 2px solid rgba(191,78,48,.5); outline-offset: 2px; }
+.opt input:focus-visible ~ .box { outline: 2px solid rgba(191,78,48,.5); outline-offset: 2px; }  /* keyboard focus ring */
 .opt .txt strong { display: block; font-weight: 600; font-size: 15px; }
 .opt .txt span { font-size: 13px; color: var(--ink-soft); }
-.opt[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.opt[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }   /* e.g. OpenDyslexic before it loads */
 .opt[aria-disabled="true"]:hover { border-color: var(--line); background: var(--paper); }
 
+/* --- Body-size slider --- */
 .sizefield { margin-bottom: 24px; }
 .sizefield label { display: block; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; margin-bottom: 10px; }
 .sizefield .val { color: var(--ink); font-weight: 600; text-transform: none; letter-spacing: 0; }
 input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .sizefield .hint { font-size: 13px; color: var(--ink-soft); margin: 8px 2px 0; }
 
-/* Preview */
+/* --- Live preview ---
+   .preview-frame is the scrollable tray; .preview-page is the white/cream
+   "sheet" whose background, colour and font are set live by app.js. */
 .preview-shell { margin-bottom: 26px; }
 .preview-frame { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--paper-2); max-height: 420px; overflow: auto; }
 .preview-page { background: #fff; color: #1a1a1a; border-radius: 6px; padding: 38px 42px; box-shadow: 0 6px 18px -8px rgba(33,29,24,.3); max-width: 540px; margin: 0 auto; transition: background .2s, color .2s; }
-.preview-page > div { margin: 0; }
+.preview-page > div { margin: 0; }   /* per-line spacing is set inline by app.js */
 
+/* --- Buttons --- */
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .btn { font-family: var(--body); font-weight: 600; font-size: 15px; padding: 13px 22px; border-radius: 11px; cursor: pointer; border: 1px solid transparent; transition: transform .12s, background .15s, box-shadow .15s; }
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 8px 20px -8px rgba(191,78,48,.6); }
 .btn-primary:hover { background: var(--accent-dark); }
-.btn-primary:disabled { background: #cbb; opacity: .5; cursor: not-allowed; box-shadow: none; }
+.btn-primary:disabled { background: #cbb; opacity: .5; cursor: not-allowed; box-shadow: none; }   /* while a PDF is being built */
 
+/* --- Status line + loading spinner --- */
 .status { font-size: 14px; margin-left: 4px; }
 .status.err { color: var(--accent-dark); font-weight: 500; }
 .status.ok { color: var(--ok); font-weight: 500; }
@@ -99,7 +124,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .spinner { display: inline-block; width: 15px; height: 15px; vertical-align: -2px; margin-right: 7px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Footnote. */
 .note { margin-top: 28px; font-size: 13px; color: var(--ink-soft); border-left: 3px solid var(--line); padding: 4px 0 4px 14px; }
 .note b { color: var(--ink); font-weight: 600; }
 
+/* --- Small screens --- */
 @media (max-width: 560px) { .wrap { padding: 40px 18px 80px; } .preview-page { padding: 26px 24px; } }
