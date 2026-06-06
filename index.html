@@ -5,28 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Readable — Make PDFs dyslexia-friendly</title>
 
-<!-- External libraries (loaded from CDN) -->
+<!-- External libraries, loaded from CDN.
+     pdf.js reads the uploaded PDF, pdf-lib builds the new one.
+     They become the globals `pdfjsLib` and `PDFLib` used in app.js. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 
-<!-- Fonts -->
+<!-- Display + body fonts for the interface (not the PDF output). -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 
-<!-- Styles -->
+<!-- All styling lives in this separate file. -->
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="wrap">
+
+  <!-- Page heading + one-line explainer -->
   <header>
     <p class="eyebrow">Accessibility · Reformat PDFs</p>
     <h1>Read<em>able</em></h1>
     <p class="lead">Drop in a PDF, tick the reading aids — the text gets re-set in a more readable form. Headings stay larger than the body text, so the document structure is preserved.</p>
   </header>
 
-  <!-- Upload -->
+  <!-- VIEW 1: upload. Hidden once a file has been read. -->
   <div class="card" id="card-upload">
+    <!-- Drop zone (also clickable; it triggers the hidden file input below). -->
     <div id="drop">
       <div class="ico">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
@@ -37,8 +42,10 @@
     <input type="file" id="file" accept="application/pdf,.pdf" class="hidden">
   </div>
 
-  <!-- Customise -->
+  <!-- VIEW 2: customise + export. Hidden until a file is loaded. -->
   <div class="card hidden" id="card-edit">
+
+    <!-- Loaded-file summary + "change PDF" link to go back. -->
     <div class="filebar">
       <span class="dot"></span>
       <span class="name" id="fname">document.pdf</span>
@@ -46,28 +53,38 @@
       <button class="linkbtn" id="reset">change PDF</button>
     </div>
 
+    <!-- Reading aids: each is a checkbox the user can toggle.
+         The custom <span class="box"> is the styled checkbox (the real
+         <input> is visually hidden and drives its checked state via CSS). -->
     <p class="section-label">Reading aids</p>
     <div class="opts" id="opts">
+
+      <!-- OpenDyslexic: starts disabled and is enabled by app.js once the
+           font has finished loading from the CDN. -->
       <label class="opt" id="opt-font-row" aria-disabled="true">
         <input type="checkbox" id="o-font" data-opt="font">
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
         <span class="txt"><strong>OpenDyslexic font</strong><span id="font-sub">typeface designed for dyslexia — loading …</span></span>
       </label>
+
       <label class="opt">
         <input type="checkbox" id="o-line" data-opt="line" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
         <span class="txt"><strong>Increased line spacing</strong><span>more space between the lines</span></span>
       </label>
+
       <label class="opt">
         <input type="checkbox" id="o-letter" data-opt="letter" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
         <span class="txt"><strong>Increased letter spacing</strong><span>letters are less cramped together</span></span>
       </label>
+
       <label class="opt">
         <input type="checkbox" id="o-word" data-opt="word" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
         <span class="txt"><strong>Increased word spacing</strong><span>words are more clearly separated</span></span>
       </label>
+
       <label class="opt">
         <input type="checkbox" id="o-bg" data-opt="bg" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
@@ -75,12 +92,14 @@
       </label>
     </div>
 
+    <!-- Body text size. Headings scale relative to this value (see app.js). -->
     <div class="sizefield">
       <label for="size">Body text size — <span class="val" id="size-val">14 pt</span></label>
       <input type="range" id="size" min="10" max="24" step="1" value="14">
       <p class="hint">Headings scale up automatically at the same ratio.</p>
     </div>
 
+    <!-- Live preview: re-rendered by app.js on every option change. -->
     <p class="section-label">Preview</p>
     <div class="preview-shell">
       <div class="preview-frame">
@@ -88,18 +107,20 @@
       </div>
     </div>
 
+    <!-- Export button + status line (progress / success / error messages). -->
     <div class="row">
       <button class="btn btn-primary" id="make">Generate &amp; download PDF</button>
       <span class="status" id="status"></span>
     </div>
   </div>
 
+  <!-- Footnote explaining what the tool does and its limits. -->
   <p class="note">
     <b>How it works:</b> The text is read from the PDF and re-set as clean, readable body text; the size differences between headings and body text are preserved. Columns, images and exact layout are not carried over. Works only with PDFs that have a real text layer — scanned ones would need OCR. Everything runs locally in your browser — nothing is uploaded.
   </p>
 </div>
 
-<!-- App logic -->
+<!-- All the behaviour lives in this separate file. -->
 <script src="app.js"></script>
 </body>
 </html>
