@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lesbar — PDFs für Legasthenie aufbereiten</title>
+<title>Readable — Make PDFs dyslexia-friendly</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
@@ -71,7 +71,7 @@
 
   .section-label { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; margin: 0 0 14px; }
 
-  /* Checkbox-Lesehilfen */
+  /* Checkbox reading aids */
   .opts { display: grid; gap: 10px; margin-bottom: 26px; }
   .opt { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); cursor: pointer; transition: border-color .15s, background .15s; }
   .opt:hover { border-color: var(--accent); background: rgba(191,78,48,.03); }
@@ -94,7 +94,7 @@
   input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
   .sizefield .hint { font-size: 13px; color: var(--ink-soft); margin: 8px 2px 0; }
 
-  /* Vorschau */
+  /* Preview */
   .preview-shell { margin-bottom: 26px; }
   .preview-frame { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--paper-2); max-height: 420px; overflow: auto; }
   .preview-page { background: #fff; color: #1a1a1a; border-radius: 6px; padding: 38px 42px; box-shadow: 0 6px 18px -8px rgba(33,29,24,.3); max-width: 540px; margin: 0 auto; transition: background .2s, color .2s; }
@@ -123,9 +123,9 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Accessibility · PDF aufbereiten</p>
-    <h1>Les<em>bar</em></h1>
-    <p class="lead">PDF rein, Lesehilfen anhaken — der Text wird in einer gut lesbaren Form neu gesetzt. Überschriften bleiben dabei größer als der Fließtext, damit die Struktur erhalten bleibt.</p>
+    <p class="eyebrow">Accessibility · Reformat PDFs</p>
+    <h1>Read<em>able</em></h1>
+    <p class="lead">Drop in a PDF, tick the reading aids — the text gets re-set in a more readable form. Headings stay larger than the body text, so the document structure is preserved.</p>
   </header>
 
   <!-- Upload -->
@@ -134,57 +134,57 @@
       <div class="ico">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
       </div>
-      <strong>PDF hier ablegen</strong>
-      <div class="sub">oder <span class="pick">Datei auswählen</span> — nur PDFs mit Textlayer</div>
+      <strong>Drop your PDF here</strong>
+      <div class="sub">or <span class="pick">choose a file</span> — PDFs with a text layer only</div>
     </div>
     <input type="file" id="file" accept="application/pdf,.pdf" class="hidden">
   </div>
 
-  <!-- Anpassen -->
+  <!-- Customise -->
   <div class="card hidden" id="card-edit">
     <div class="filebar">
       <span class="dot"></span>
-      <span class="name" id="fname">dokument.pdf</span>
+      <span class="name" id="fname">document.pdf</span>
       <span class="meta" id="fmeta"></span>
-      <button class="linkbtn" id="reset">anderes PDF</button>
+      <button class="linkbtn" id="reset">change PDF</button>
     </div>
 
-    <p class="section-label">Lesehilfen</p>
+    <p class="section-label">Reading aids</p>
     <div class="opts" id="opts">
       <label class="opt" id="opt-font-row" aria-disabled="true">
         <input type="checkbox" id="o-font" data-opt="font">
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
-        <span class="txt"><strong>OpenDyslexic-Schrift</strong><span id="font-sub">spezielle Schrift für Legasthenie — wird geladen …</span></span>
+        <span class="txt"><strong>OpenDyslexic font</strong><span id="font-sub">typeface designed for dyslexia — loading …</span></span>
       </label>
       <label class="opt">
         <input type="checkbox" id="o-line" data-opt="line" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
-        <span class="txt"><strong>Größerer Zeilenabstand</strong><span>mehr Luft zwischen den Zeilen</span></span>
+        <span class="txt"><strong>Increased line spacing</strong><span>more space between the lines</span></span>
       </label>
       <label class="opt">
         <input type="checkbox" id="o-letter" data-opt="letter" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
-        <span class="txt"><strong>Mehr Buchstabenabstand</strong><span>Buchstaben kleben weniger aneinander</span></span>
+        <span class="txt"><strong>Increased letter spacing</strong><span>letters are less cramped together</span></span>
       </label>
       <label class="opt">
         <input type="checkbox" id="o-word" data-opt="word" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
-        <span class="txt"><strong>Mehr Wortabstand</strong><span>Wörter klarer voneinander getrennt</span></span>
+        <span class="txt"><strong>Increased word spacing</strong><span>words are more clearly separated</span></span>
       </label>
       <label class="opt">
         <input type="checkbox" id="o-bg" data-opt="bg" checked>
         <span class="box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
-        <span class="txt"><strong>Augenschonender Hintergrund</strong><span>warmes Cremeweiß statt grellem Weiß</span></span>
+        <span class="txt"><strong>Easy-on-the-eyes background</strong><span>warm cream instead of harsh white</span></span>
       </label>
     </div>
 
     <div class="sizefield">
-      <label for="size">Schriftgröße Fließtext — <span class="val" id="size-val">14 pt</span></label>
+      <label for="size">Body text size — <span class="val" id="size-val">14 pt</span></label>
       <input type="range" id="size" min="10" max="24" step="1" value="14">
-      <p class="hint">Überschriften werden automatisch im gleichen Verhältnis mitskaliert.</p>
+      <p class="hint">Headings scale up automatically at the same ratio.</p>
     </div>
 
-    <p class="section-label">Vorschau</p>
+    <p class="section-label">Preview</p>
     <div class="preview-shell">
       <div class="preview-frame">
         <div class="preview-page" id="preview"></div>
@@ -192,13 +192,13 @@
     </div>
 
     <div class="row">
-      <button class="btn btn-primary" id="make">PDF erzeugen &amp; herunterladen</button>
+      <button class="btn btn-primary" id="make">Generate &amp; download PDF</button>
       <span class="status" id="status"></span>
     </div>
   </div>
 
   <p class="note">
-    <b>Wie es arbeitet:</b> Der Text wird aus dem PDF gelesen und als gut lesbarer Fließtext neu gesetzt; die Größenunterschiede zwischen Überschriften und Text bleiben dabei erhalten. Spalten, Bilder und exaktes Layout werden nicht übernommen. Funktioniert nur bei PDFs mit echtem Textlayer (gescannte bräuchten OCR). Alles läuft lokal im Browser — nichts wird hochgeladen.
+    <b>How it works:</b> The text is read from the PDF and re-set as clean, readable body text; the size differences between headings and body text are preserved. Columns, images and exact layout are not carried over. Works only with PDFs that have a real text layer — scanned ones would need OCR. Everything runs locally in your browser — nothing is uploaded.
   </p>
 </div>
 
@@ -215,9 +215,9 @@
   const previewEl = $('preview'), statusEl = $('status'), makeBtn = $('make');
 
   let docLines = [];     // [{text, size, factor, para}]
-  let baseName = 'dokument';
+  let baseName = 'document';
 
-  // ---- OpenDyslexic optional laden ----
+  // ---- Load OpenDyslexic optionally ----
   let openDyslexicBytes = null, fontkitLib = null, odPreviewReady = false;
   (async () => {
     const fkUrls = [
@@ -237,20 +237,20 @@
       if (!buf) throw 0;
       openDyslexicBytes = buf;
 
-      // Vorschau-Font registrieren
+      // register font for the preview
       try { const ff = new FontFace('ODPreview', buf); await ff.load(); document.fonts.add(ff); odPreviewReady = true; } catch(e){}
 
       fontRow.setAttribute('aria-disabled', 'false');
       oFont.disabled = false; oFont.checked = true;
-      fontSub.textContent = 'spezielle Schrift für Legasthenie';
+      fontSub.textContent = 'typeface designed for dyslexia';
       syncOptStyles(); renderPreview();
     } catch (e) {
-      fontSub.textContent = 'gerade nicht verfügbar (CDN nicht erreichbar)';
+      fontSub.textContent = 'currently unavailable (CDN unreachable)';
     }
   })();
   function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
 
-  // ---- Optionen lesen ----
+  // ---- Read options ----
   function opts(){
     return {
       font: oFont.checked && !oFont.disabled,
@@ -283,16 +283,16 @@
   function fmtSize(b){ if (b<1024) return b+' B'; if (b<1048576) return (b/1024).toFixed(0)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
   function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  // ---- Einlesen ----
+  // ---- Read the file ----
   async function handleFile(file){
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       cardUpload.classList.add('hidden'); cardEdit.classList.remove('hidden');
-      fname.textContent = file.name; setStatus('Das ist kein PDF. Bitte eine PDF-Datei wählen.', 'err'); return;
+      fname.textContent = file.name; setStatus("That's not a PDF. Please choose a PDF file.", 'err'); return;
     }
-    baseName = file.name.replace(/\.pdf$/i,'') || 'dokument';
+    baseName = file.name.replace(/\.pdf$/i,'') || 'document';
     fname.textContent = file.name; fmeta.textContent = fmtSize(file.size);
     cardUpload.classList.add('hidden'); cardEdit.classList.remove('hidden');
-    previewEl.innerHTML = ''; setStatus('<span class="spinner"></span>Text wird ausgelesen …', 'work');
+    previewEl.innerHTML = ''; setStatus('<span class="spinner"></span>Reading text …', 'work');
 
     try {
       const buf = await file.arrayBuffer();
@@ -302,27 +302,27 @@
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
         const pageLines = itemsToLines(content.items);
-        if (p > 1 && pageLines.length) pageLines[0].para = true; // Seitenwechsel = Absatz
+        if (p > 1 && pageLines.length) pageLines[0].para = true; // page break = paragraph
         lines = lines.concat(pageLines);
-        setStatus(`<span class="spinner"></span>Seite ${p} von ${pdf.numPages} …`, 'work');
+        setStatus(`<span class="spinner"></span>Page ${p} of ${pdf.numPages} …`, 'work');
       }
       if (!lines.length) {
-        setStatus('Kein Text gefunden — das PDF ist vermutlich gescannt (nur Bilder). Dafür bräuchte es OCR.', 'err');
+        setStatus('No text found — this PDF is probably scanned (images only). That would need OCR.', 'err');
         docLines = []; return;
       }
       computeFactors(lines);
       docLines = lines;
       renderPreview();
-      setStatus(`Fertig — ${pdf.numPages} Seite${pdf.numPages>1?'n':''} ausgelesen. Lesehilfen anhaken und exportieren.`, 'ok');
+      setStatus(`Done — read ${pdf.numPages} page${pdf.numPages>1?'s':''}. Tick the reading aids and export.`, 'ok');
     } catch (err) {
       console.error(err);
-      let msg = 'Das PDF konnte nicht gelesen werden.';
-      if (/password/i.test(err && err.message || '')) msg = 'Das PDF ist passwortgeschützt — das kann ich nicht öffnen.';
+      let msg = 'The PDF could not be read.';
+      if (/password/i.test(err && err.message || '')) msg = "The PDF is password-protected — I can't open it.";
       setStatus(msg, 'err');
     }
   }
 
-  // Items -> Zeilen mit dominanter Schriftgröße + Absatzmarkierung
+  // Items -> lines with dominant font size + paragraph flag
   function itemsToLines(items){
     const raw = []; let cur = null, lastY = null;
     for (const it of items) {
@@ -355,7 +355,7 @@
     return lines;
   }
 
-  // Fließtextgröße = die in Textmenge häufigste Größe; daraus relative Faktoren
+  // Body size = the size that covers the most text; derive relative factors from it
   function computeFactors(lines){
     const freq = {};
     for (const l of lines) freq[l.size] = (freq[l.size] || 0) + l.text.length;
@@ -363,15 +363,15 @@
     for (const k in freq) { if (freq[k] > max) { max = freq[k]; base = parseFloat(k); } }
     for (const l of lines) {
       let f = l.size / base;
-      if (f > 0.88 && f < 1.18) f = 1;          // Fließtext vereinheitlichen
-      f = Math.max(0.75, Math.min(2.6, f));      // Ausreißer begrenzen
+      if (f > 0.88 && f < 1.18) f = 1;          // unify body text
+      f = Math.max(0.75, Math.min(2.6, f));      // clamp outliers
       l.factor = Math.round(f * 100) / 100;
     }
   }
 
-  // ---- Live-Vorschau ----
+  // ---- Live preview ----
   function renderPreview(){
-    if (!docLines.length) { previewEl.innerHTML = '<div style="color:#999;font-size:14px;">Vorschau erscheint nach dem Auslesen.</div>'; return; }
+    if (!docLines.length) { previewEl.innerHTML = '<div style="color:#999;font-size:14px;">Preview appears once a file has been read.</div>'; return; }
     const o = opts();
     const lhF = o.line ? 1.8 : 1.35;
     previewEl.style.background = o.bg ? '#fbf3e2' : '#ffffff';
@@ -389,7 +389,7 @@
     previewEl.innerHTML = html;
   }
 
-  // ---- Sanitisierung ----
+  // ---- Sanitising ----
   const REPL = {
     '\u2018':"'", '\u2019':"'", '\u201A':"'", '\u201B':"'", '\u201C':'"', '\u201D':'"', '\u201E':'"', '\u201F':'"',
     '\u2013':'-', '\u2014':'-', '\u2015':'-', '\u2212':'-', '\u2026':'...', '\u2022':'-', '\u00B7':'-', '\u25CF':'-',
@@ -399,7 +399,7 @@
   function sanitizeWinAnsi(s){ let o=''; for (const ch of s){ if (REPL[ch]!==undefined){ o+=REPL[ch]; continue; } const c=ch.codePointAt(0); if (c<=0xFF||c===0x20AC) o+=ch; } return o; }
   function sanitizeSoft(s){ return s.replace(/[\u200B\u00AD\uFEFF]/g,'').replace(/\u00A0/g,' '); }
 
-  // ---- Breite messen (mit Buchstaben-/Wortabstand) ----
+  // ---- Measure width (incl. letter / word spacing) ----
   function sw(font, s, size){ try { return font.widthOfTextAtSize(s, size); } catch(e){ return 0; } }
   function measure(text, font, size, cs, ws){
     if (cs === 0 && ws === 0) return sw(font, text, size);
@@ -424,10 +424,10 @@
     return lines;
   }
 
-  // ---- PDF erzeugen ----
+  // ---- Build the PDF ----
   makeBtn.addEventListener('click', async () => {
-    if (!docLines.length){ setStatus('Kein Text zum Exportieren da.', 'err'); return; }
-    makeBtn.disabled = true; setStatus('<span class="spinner"></span>PDF wird gebaut …', 'work');
+    if (!docLines.length){ setStatus('No text to export.', 'err'); return; }
+    makeBtn.disabled = true; setStatus('<span class="spinner"></span>Building PDF …', 'work');
     try {
       const o = opts();
       const doc = await PDFDocument.create();
@@ -479,14 +479,14 @@
       const bytes = await doc.save();
       const blob = new Blob([bytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = baseName + '_lesbar.pdf';
+      const a = document.createElement('a'); a.href = url; a.download = baseName + '_readable.pdf';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
       const pc = doc.getPageCount();
-      setStatus(`Geschafft — PDF mit ${pc} Seite${pc>1?'n':''} heruntergeladen.`, 'ok');
+      setStatus(`Done — downloaded a PDF with ${pc} page${pc>1?'s':''}.`, 'ok');
     } catch (err) {
       console.error(err);
-      setStatus('Beim Erzeugen ist etwas schiefgelaufen: ' + (err.message || 'unbekannt'), 'err');
+      setStatus('Something went wrong while generating: ' + (err.message || 'unknown'), 'err');
     } finally {
       makeBtn.disabled = false;
     }
