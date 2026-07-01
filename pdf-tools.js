@@ -1,6 +1,79 @@
 const BULLET_RE = /^([•·●▪▸▶→✓✗◆◇★◉○▷►–§■]\s*|-\s+|\*\s+)/u;
 const NUMBERED_RE = /^(\d{1,2}[.)]\s+|[a-z][.)]\s+|\([a-z\d]\)\s+)/i;
 
+// Abbreviations that end with a period but are NOT sentence boundaries
+const SENT_ABBREVS = /\b(Mr|Mrs|Ms|Dr|Prof|Rev|Sr|Jr|Sgt|Cpl|Lt|Capt|Gen|Adm|Pvt|Dept|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec|vs|etc|cf|al|vol|pp|fig|sect|ch|ed|no|nr|ref|approx|est|govt|max|min|tel|temp|univ|viz|avg|inc|corp|co|ltd)$/i;
+
+function splitTextIntoSentences(text) {
+  const sentences = [];
+  let start = 0;
+  // Match sentence-ending punctuation followed by whitespace and an uppercase letter / opening quote
+  const re = /([.!?]['")\]]*)\s+(?=[A-Z"'(\[])/g;
+  let match;
+
+  while ((match = re.exec(text)) !== null) {
+    if (match[1][0] === '.') {
+      const before = text.slice(0, match.index);
+      if (before.endsWith('.')) continue;         // ellipsis (..)
+      if (/\d$/.test(before)) continue;           // decimal number (3.14)
+      if (/\b[A-Z]$/.test(before)) continue;      // single-letter initial (J.)
+      if (SENT_ABBREVS.test(before)) continue;    // known abbreviation
+    }
+    sentences.push(text.slice(start, match.index + match[1].length).trim());
+    start = match.index + match[0].length;
+  }
+
+  const rest = text.slice(start).trim();
+  if (rest) sentences.push(rest);
+  return sentences.filter(Boolean);
+}
+
+function splitSentences(lines) {
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Structural / special lines pass through unchanged
+    if (line.isPageDiv || line.isCode || line.isBullet || line.isNumbered ||
+        line.isFooter || line.isPageHeader || !line.text) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    // Collect all bands that belong to the same paragraph (until next para break or special line)
+    const paraLines = [line];
+    i++;
+    while (i < lines.length) {
+      const next = lines[i];
+      if (next.para || next.isPageDiv || next.isCode || next.isBullet ||
+          next.isNumbered || next.isFooter || next.isPageHeader) break;
+      paraLines.push(next);
+      i++;
+    }
+
+    // Join bands into one continuous paragraph text
+    const fullText = paraLines.map(l => l.text).join(' ').replace(/\s+/g, ' ').trim();
+    const sentences = splitTextIntoSentences(fullText);
+
+    if (sentences.length <= 1) {
+      // Nothing to split — emit original bands unchanged
+      for (const l of paraLines) out.push(l);
+    } else {
+      // Use first band's metadata as template for all resulting sentences
+      const tmpl = paraLines[0];
+      out.push({ ...tmpl, text: sentences[0] });
+      for (let j = 1; j < sentences.length; j++) {
+        out.push({ ...tmpl, text: sentences[j], para: false, isSentenceBreak: true });
+      }
+    }
+  }
+
+  return out;
+}
+
 function isMonoFont(name, styles) {
   const font = styles && styles[name];
   return font ? /courier|mono|code|consolas|fira|source.?code|inconsolata|hack/i.test(font.fontFamily || '') : false;
@@ -286,6 +359,7 @@ function escapeHtml(text) {
 Object.assign(window, {
   itemsToLines,
   mergeListContinuations,
+  splitSentences,
   computeFactors,
   sanitizeWinAnsi,
   sanitizeSoft,

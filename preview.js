@@ -68,7 +68,7 @@ function renderPreview(docLines, options, previewEl, previewFrame) {
     const size = options.size * line.factor;
     const letterSpacing = options.letter ? size * 0.07 : 0;
     const wordSpacing = options.word ? size * 0.18 : 0;
-    const topMargin = line.para ? options.size * 0.7 : 2;
+    const topMargin = line.para ? options.size * 0.7 : line.isSentenceBreak ? options.size * 0.3 : 2;
     const fontWeight = line.factor > 1.18 ? 600 : 400;
     const indent = (line.isBullet || line.isNumbered) ? Math.min(line.indent || 0, 4) * 16 : 0;
 
