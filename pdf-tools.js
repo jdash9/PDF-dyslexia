@@ -40,6 +40,8 @@ function itemsToLines(items, styles, viewport) {
       y: transform[5],
       w: item.width || 0,
       sz: size,
+      pageWidth: viewport ? viewport.width : 595,
+      pageHeight: viewport ? viewport.height : 842,
       isMono: isMonoFont(item.fontName, styles),
       isSymbol: isSymbolFont(item.fontName, styles),
     });
@@ -127,7 +129,7 @@ function itemsToLines(items, styles, viewport) {
 
     if (!text) continue;
 
-    lines.push({ text, size, para: paragraph, x, isCode, isBullet, isNumbered, numPrefix, isFooter, isPageHeader });
+    lines.push({ text, size, para: paragraph, x, y: band.els[0].y, pageWidth: pageWidth, pageHeight: pageHeight, isCode, isBullet, isNumbered, numPrefix, isFooter, isPageHeader });
     previousY = band.y;
     previousSize = size;
   }

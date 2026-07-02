@@ -16,8 +16,9 @@ function createPdfExporter(PDFDocument, StandardFonts, rgb) {
     }
     codeFont = await doc.embedFont(StandardFonts.Courier);
 
-    const pageWidth = 595.28;
-    const pageHeight = 841.89;
+    const orientation = options.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const pageWidth = orientation === 'landscape' ? 841.89 : 595.28;
+    const pageHeight = orientation === 'landscape' ? 595.28 : 841.89;
     const margin = 25 * 2.83465;
     const maxWidth = pageWidth - margin * 2;
     const baseSize = options.size;
@@ -31,11 +32,87 @@ function createPdfExporter(PDFDocument, StandardFonts, rgb) {
       return page;
     };
 
-    let page = newPage();
+    let page = null;
     let y = pageHeight - margin;
+    let hasPageContent = false;
 
     for (const line of docLines) {
-      if (line.isPageDiv) continue;
+      if (line.isPageDiv) {
+        if (!page) {
+          page = newPage();
+          y = pageHeight - margin;
+          hasPageContent = false;
+          continue;
+        }
+        if (hasPageContent) {
+          page = newPage();
+          y = pageHeight - margin;
+          hasPageContent = false;
+        }
+        continue;
+      }
+
+      if (line.isImage) {
+        if (!page) {
+          page = newPage();
+          y = pageHeight - margin;
+        }
+
+        const imageBytes = await fetch(line.imageDataUrl).then(response => response.arrayBuffer());
+        const image = await doc.embedPng(imageBytes);
+        const pageContentWidth = maxWidth;
+        const pageContentHeight = pageHeight - margin * 2;
+        const imageAspect = image.width / image.height;
+        const widthRatio = Math.max(0.18, Math.min(1, Number(line.imageWidthRatio) || 1));
+        const xRatio = Math.max(0, Math.min(1, Number(line.imageXRatio) || 0));
+        const yRatio = Math.max(0, Math.min(1, Number(line.imageYRatio) || 0));
+        let imageWidth = pageContentWidth * widthRatio;
+        let imageHeight = imageWidth / imageAspect;
+        if (imageHeight > pageContentHeight) {
+          imageHeight = pageContentHeight;
+          imageWidth = imageHeight * imageAspect;
+        }
+
+        if (line.pageOnlyImage) {
+          imageWidth = pageContentWidth;
+          imageHeight = imageWidth / imageAspect;
+          if (imageHeight > pageContentHeight) {
+            imageHeight = pageContentHeight;
+            imageWidth = imageHeight * imageAspect;
+          }
+          const xOnly = margin + (pageContentWidth - imageWidth) * 0.5;
+          const yOnly = margin + (pageContentHeight - imageHeight) * 0.5;
+          page.drawImage(image, { x: xOnly, y: yOnly, width: imageWidth, height: imageHeight });
+          y = yOnly - Math.max(8, baseSize * 0.35);
+          hasPageContent = true;
+          continue;
+        }
+
+        const blockTopGap = Math.max(8, baseSize * 0.6);
+        const desiredTopY = pageHeight - margin - yRatio * pageContentHeight;
+        if (desiredTopY < y) {
+          y = Math.max(margin + imageHeight, desiredTopY);
+        }
+        if (y - blockTopGap - imageHeight < margin) {
+          page = newPage();
+          y = pageHeight - margin;
+        }
+
+        y -= blockTopGap;
+  const x = margin + (pageContentWidth - imageWidth) * xRatio;
+        const yPos = y - imageHeight;
+        page.drawImage(image, { x, y: yPos, width: imageWidth, height: imageHeight });
+        y = yPos - Math.max(8, baseSize * 0.35);
+        hasPageContent = true;
+
+        continue;
+      }
+
+      if (!page) {
+        page = newPage();
+        y = pageHeight - margin;
+        hasPageContent = false;
+      }
 
       const indent = (line.indent || 0) * 14;
 
@@ -55,6 +132,7 @@ function createPdfExporter(PDFDocument, StandardFonts, rgb) {
           const baseY = y - size;
           try { page.drawText(wrappedLine, { x: margin + indent, y: baseY, size, font: codeFont, color: textColor }); } catch (error) {}
           y -= lineHeight;
+          hasPageContent = true;
         }
         continue;
       }
@@ -93,6 +171,7 @@ function createPdfExporter(PDFDocument, StandardFonts, rgb) {
           }
         }
         y -= lineHeight;
+        hasPageContent = true;
       }
     }
 

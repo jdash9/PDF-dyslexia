@@ -91,6 +91,15 @@
         </div>
 
         <button class="btn btn-primary" id="make" disabled>Generate &amp; download PDF</button>
+        <div class="ocr-progress hidden" id="ocr-progress">
+          <div class="ocr-progress-head">
+            <span class="ocr-progress-label" id="ocr-progress-label">OCR in progress…</span>
+            <span class="ocr-progress-text" id="ocr-progress-text">0%</span>
+          </div>
+          <div class="ocr-progress-track">
+            <div class="ocr-progress-bar" id="ocr-progress-bar"></div>
+          </div>
+        </div>
         <span class="status" id="status"></span>
 
       </div>
@@ -103,6 +112,12 @@
         <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
         <span class="zoom-level" id="zoom-level">100 %</span>
         <button class="zoom-btn" id="zoom-in"  title="Zoom in">+</button>
+        <button class="zoom-btn orientation-btn" id="orientation-toggle" title="Toggle page orientation" aria-label="Toggle page orientation">
+          <span class="orientation-icon">
+            <span class="orientation-box portrait"></span>
+            <span class="orientation-box landscape"></span>
+          </span>
+        </button>
         <button class="zoom-btn zoom-reset" id="zoom-reset" title="Reset zoom">↺</button>
       </div>
 
@@ -114,7 +129,7 @@
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
             </div>
             <strong>Drop your PDF here</strong>
-            <p class="sub">or <span class="pick">choose a file</span> — PDFs with a text layer only</p>
+            <p class="sub">or <span class="pick">choose a file</span> — text-based PDFs or scanned documents</p>
           </div>
         </div>
         <input type="file" id="file" accept="application/pdf,.pdf" class="hidden">

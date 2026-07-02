@@ -17,6 +17,10 @@ function renderPreview(docLines, options, previewEl, previewFrame) {
   previewEl.style.color = 'inherit';
   previewEl.style.fontFamily = fontFamily;
 
+  const orientationClass = options.orientation === 'landscape' ? 'landscape-preview' : 'portrait-preview';
+  previewEl.classList.remove('portrait-preview', 'landscape-preview');
+  previewEl.classList.add(orientationClass);
+
   const rootStyles = getComputedStyle(document.documentElement);
   const warmBg = rootStyles.getPropertyValue('--preview-bg-warm').trim();
   const coolBg = rootStyles.getPropertyValue('--preview-bg-cool').trim();
@@ -43,6 +47,23 @@ function renderPreview(docLines, options, previewEl, previewFrame) {
     }
 
     if (line.isFooter) {
+      index++;
+      continue;
+    }
+
+    if (line.isImage) {
+      if (line.pageOnlyImage) {
+        const imageStyleOnly = 'width:100%;height:auto;display:block;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.14);object-fit:contain;';
+        html += `<div style="margin:10px 0 10px;"><img src="${line.imageDataUrl}" alt="Kept image content" style="${imageStyleOnly}"></div>`;
+        index++;
+        continue;
+      }
+      const widthRatio = Math.max(0.18, Math.min(1, Number(line.imageWidthRatio) || 1));
+      const xRatio = Math.max(0, Math.min(1, Number(line.imageXRatio) || 0));
+      const widthPct = Math.round(widthRatio * 100);
+      const leftPct = Math.max(0, Math.min(100 - widthPct, Math.round((100 - widthPct) * xRatio)));
+      const imageStyle = `width:${widthPct}%;margin-left:${leftPct}%;height:auto;display:block;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.14);object-fit:contain;`;
+      html += `<div style="margin:18px 0 8px;"><img src="${line.imageDataUrl}" alt="Kept image content" style="${imageStyle}"></div>`;
       index++;
       continue;
     }
