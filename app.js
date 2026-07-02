@@ -401,10 +401,14 @@ function createCanvasRegion(sourceCanvas, region, padding = 8) {
   const { x0, y0, x1, y1 } = region;
   const width = Math.max(4, x1 - x0);
   const height = Math.max(4, y1 - y0);
-  const cropX = Math.max(0, x0 - padding);
-  const cropY = Math.max(0, y0 - padding);
-  const cropWidth = Math.min(sourceCanvas.width - cropX, width + padding * 2);
-  const cropHeight = Math.min(sourceCanvas.height - cropY, height + padding * 2);
+  const aspect = width / Math.max(1, height);
+  const extraX = aspect > 1.35 ? Math.max(padding, Math.round(width * 0.04)) : padding;
+  const extraY = aspect > 1.35 ? Math.max(padding + 8, Math.round(height * 0.18)) : padding;
+
+  const cropX = Math.max(0, x0 - extraX);
+  const cropY = Math.max(0, y0 - extraY);
+  const cropWidth = Math.min(sourceCanvas.width - cropX, width + extraX * 2);
+  const cropHeight = Math.min(sourceCanvas.height - cropY, height + extraY * 2);
 
   const outputCanvas = document.createElement('canvas');
   outputCanvas.width = cropWidth;
@@ -412,6 +416,84 @@ function createCanvasRegion(sourceCanvas, region, padding = 8) {
   const outputCtx = outputCanvas.getContext('2d');
   outputCtx.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
   return outputCanvas;
+}
+
+function expandRegionToContent(canvas, region, textRegions = []) {
+  const ctx = canvas.getContext('2d');
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const { data } = imageData;
+  const textMask = new Uint8Array(width * height);
+
+  for (const t of textRegions) {
+    const x0 = Math.max(0, Math.floor(t.x0));
+    const y0 = Math.max(0, Math.floor(t.y0));
+    const x1 = Math.min(width, Math.ceil(t.x1));
+    const y1 = Math.min(height, Math.ceil(t.y1));
+    for (let y = y0; y < y1; y += 1) {
+      const row = y * width;
+      for (let x = x0; x < x1; x += 1) textMask[row + x] = 1;
+    }
+  }
+
+  function isVisualPixel(x, y) {
+    const p = y * width + x;
+    if (textMask[p]) return false;
+    const i = p * 4;
+    const alpha = data[i + 3];
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    return alpha > 24 && !(r > 247 && g > 247 && b > 247);
+  }
+
+  let x0 = Math.max(0, Math.floor(region.x0));
+  let y0 = Math.max(0, Math.floor(region.y0));
+  let x1 = Math.min(width, Math.ceil(region.x1));
+  let y1 = Math.min(height, Math.ceil(region.y1));
+
+  const maxGrow = Math.max(18, Math.round(Math.min(width, height) * 0.09));
+
+  for (let step = 0; step < maxGrow; step += 1) {
+    let grew = false;
+
+    if (x0 > 0) {
+      let hit = 0;
+      for (let y = y0; y < y1; y += 1) if (isVisualPixel(x0 - 1, y)) hit += 1;
+      if (hit > Math.max(2, Math.round((y1 - y0) * 0.02))) {
+        x0 -= 1;
+        grew = true;
+      }
+    }
+    if (x1 < width) {
+      let hit = 0;
+      for (let y = y0; y < y1; y += 1) if (isVisualPixel(x1, y)) hit += 1;
+      if (hit > Math.max(2, Math.round((y1 - y0) * 0.02))) {
+        x1 += 1;
+        grew = true;
+      }
+    }
+    if (y0 > 0) {
+      let hit = 0;
+      for (let x = x0; x < x1; x += 1) if (isVisualPixel(x, y0 - 1)) hit += 1;
+      if (hit > Math.max(2, Math.round((x1 - x0) * 0.015))) {
+        y0 -= 1;
+        grew = true;
+      }
+    }
+    if (y1 < height) {
+      let hit = 0;
+      for (let x = x0; x < x1; x += 1) if (isVisualPixel(x, y1)) hit += 1;
+      if (hit > Math.max(2, Math.round((x1 - x0) * 0.015))) {
+        y1 += 1;
+        grew = true;
+      }
+    }
+
+    if (!grew) break;
+  }
+
+  return { ...region, x0, y0, x1, y1, area: Math.max(1, (x1 - x0) * (y1 - y0)) };
 }
 
 function buildTextRegionsFromItems(items, viewport, scale = 1.6) {
@@ -445,7 +527,7 @@ function scoreImageRegion(region, canvasWidth) {
   const centerX = (region.x0 + region.x1) * 0.5;
   const rightBias = centerX / Math.max(1, canvasWidth);
   const aspectPenalty = aspect < 0.25 || aspect > 4.5 ? 0.5 : 1;
-  return region.area * (0.65 + rightBias * 0.35) * aspectPenalty;
+  return region.area * (0.8 + rightBias * 0.2) * aspectPenalty;
 }
 
 function areaOfIntersection(a, b) {
@@ -495,7 +577,7 @@ function regionPassesHardFilter(region, canvasWidth, canvasHeight, textRegions, 
     if (aspect < 0.22 || aspect > 4.8) return false;
     if (textOverlapRatio > 0.015) return false;
     if (touchedEdges >= 3) return false;
-    if (centerXRatio < 0.45) return false;
+    if (centerXRatio < 0.12) return false;
     return true;
   }
 
@@ -508,6 +590,18 @@ function regionPassesHardFilter(region, canvasWidth, canvasHeight, textRegions, 
   return true;
 }
 
+function hasStrongSecondaryRegion(sortedRegions, canvasWidth) {
+  if (!sortedRegions || sortedRegions.length < 2) return false;
+  const a = sortedRegions[0];
+  const b = sortedRegions[1];
+  const aWidth = Math.max(1, a.x1 - a.x0);
+  const bWidth = Math.max(1, b.x1 - b.x0);
+  const bAreaRatio = b.area / Math.max(1, a.area);
+  const horizontalGap = Math.abs(((a.x0 + a.x1) * 0.5) - ((b.x0 + b.x1) * 0.5));
+  const minGap = Math.max(24, Math.round(canvasWidth * 0.16));
+  return bAreaRatio >= 0.42 && bWidth > 40 && aWidth > 40 && horizontalGap >= minGap;
+}
+
 function pickBestImageRegions(regions, canvasWidth, canvasHeight, textRegions, preferSingleMainRegion) {
   if (!regions.length) return [];
 
@@ -516,12 +610,16 @@ function pickBestImageRegions(regions, canvasWidth, canvasHeight, textRegions, p
   if (!filtered.length) return [];
 
   const sorted = [...filtered].sort((a, b) => scoreImageRegion(b, canvasWidth) - scoreImageRegion(a, canvasWidth));
-  if (preferSingleMainRegion) return [sorted[0]];
+  if (preferSingleMainRegion) {
+    if (hasStrongSecondaryRegion(sorted, canvasWidth)) return sorted.slice(0, 2);
+    return [sorted[0]];
+  }
   return sorted.slice(0, 2);
 }
 
 function shouldKeepRegionsForPage(selectedRegions, pageTextLines, canvasWidth, canvasHeight) {
   if (!selectedRegions.length) return false;
+  if (selectedRegions.length >= 2) return true;
   const isLowTextPage = (pageTextLines || []).length <= 2;
   if (!isLowTextPage) return true;
 
@@ -585,7 +683,7 @@ function detectImageRegionsFromCanvas(canvas, textRegions = []) {
     const r = data[index];
     const g = data[index + 1];
     const b = data[index + 2];
-    const nearWhite = r > 232 && g > 232 && b > 232;
+    const nearWhite = r > 247 && g > 247 && b > 247;
     return alpha > 24 && !nearWhite;
   }
 
@@ -615,6 +713,10 @@ function detectImageRegionsFromCanvas(canvas, textRegions = []) {
       stack.push([x - 1, y]);
       stack.push([x, y + 1]);
       stack.push([x, y - 1]);
+      stack.push([x + 1, y + 1]);
+      stack.push([x - 1, y + 1]);
+      stack.push([x + 1, y - 1]);
+      stack.push([x - 1, y - 1]);
     }
 
     if (!area) return null;
@@ -694,7 +796,7 @@ function getDominantVisualRegion(canvas, textRegions = [], preferRightSide = tru
         const r = data[idx];
         const g = data[idx + 1];
         const b = data[idx + 2];
-        const nearWhite = r > 236 && g > 236 && b > 236;
+        const nearWhite = r > 247 && g > 247 && b > 247;
         if (alpha <= 24 || nearWhite) continue;
 
         count += 1;
@@ -710,10 +812,14 @@ function getDominantVisualRegion(canvas, textRegions = [], preferRightSide = tru
   }
 
   const rightStart = Math.floor(width * 0.45);
+  const leftEnd = Math.floor(width * 0.55);
   const rightBox = preferRightSide ? bboxForRange(rightStart, width) : null;
+  const leftBox = preferRightSide ? bboxForRange(0, leftEnd) : null;
   const fullBox = bboxForRange(0, width);
 
-  const chosen = rightBox && rightBox.area > width * height * 0.03 ? rightBox : fullBox;
+  const hasStrongRight = rightBox && rightBox.area > width * height * 0.03;
+  const hasStrongLeft = leftBox && leftBox.area > width * height * 0.03;
+  const chosen = hasStrongRight && !hasStrongLeft ? rightBox : fullBox;
   if (!chosen) return null;
 
   const boxWidth = Math.max(1, chosen.x1 - chosen.x0);
@@ -904,15 +1010,16 @@ async function handleFile(file) {
         const selectedRegions = pickBestImageRegions(regions, pageCanvas.width, pageCanvas.height, textRegions, pageTextLines.length > 0);
         if (shouldKeepRegionsForPage(selectedRegions, pageTextLines, pageCanvas.width, pageCanvas.height)) {
           for (const region of selectedRegions) {
-            const regionCanvas = createCanvasRegion(pageCanvas, region, 8);
+            const expandedRegion = expandRegionToContent(pageCanvas, region, textRegions);
+            const regionCanvas = createCanvasRegion(pageCanvas, expandedRegion, 10);
             pageImageBlocks.push({
               isImage: true,
               imageDataUrl: regionCanvas.toDataURL('image/png'),
               imageLandscape: regionCanvas.width > regionCanvas.height * 1.05,
               imageWidthRatio: Math.max(0.18, Math.min(1, regionCanvas.width / Math.max(1, pageCanvas.width))),
-              imageXRatio: Math.max(0, Math.min(1, region.x0 / Math.max(1, pageCanvas.width))),
-              imageYRatio: Math.max(0, Math.min(1, region.y0 / Math.max(1, pageCanvas.height))),
-              sortY: region.y0 / Math.max(1, pageCanvas.height),
+              imageXRatio: Math.max(0, Math.min(1, expandedRegion.x0 / Math.max(1, pageCanvas.width))),
+              imageYRatio: Math.max(0, Math.min(1, expandedRegion.y0 / Math.max(1, pageCanvas.height))),
+              sortY: expandedRegion.y0 / Math.max(1, pageCanvas.height),
               isFooter: false,
               isPageHeader: false,
             });
@@ -922,15 +1029,16 @@ async function handleFile(file) {
           const isLowTextPage = textStats.lineCount <= 3 && textStats.charCount <= 42;
           const fallbackRegion = getDominantVisualRegion(pageCanvas, textRegions, true);
           if (fallbackRegion) {
-            const regionCanvas = createCanvasRegion(pageCanvas, fallbackRegion, 10);
+            const expandedRegion = expandRegionToContent(pageCanvas, fallbackRegion, textRegions);
+            const regionCanvas = createCanvasRegion(pageCanvas, expandedRegion, 12);
             pageImageBlocks.push({
               isImage: true,
               imageDataUrl: regionCanvas.toDataURL('image/png'),
               imageLandscape: regionCanvas.width > regionCanvas.height * 1.05,
               imageWidthRatio: Math.max(0.2, Math.min(1, regionCanvas.width / Math.max(1, pageCanvas.width))),
-              imageXRatio: Math.max(0, Math.min(1, fallbackRegion.x0 / Math.max(1, pageCanvas.width))),
-              imageYRatio: Math.max(0, Math.min(1, fallbackRegion.y0 / Math.max(1, pageCanvas.height))),
-              sortY: fallbackRegion.y0 / Math.max(1, pageCanvas.height),
+              imageXRatio: Math.max(0, Math.min(1, expandedRegion.x0 / Math.max(1, pageCanvas.width))),
+              imageYRatio: Math.max(0, Math.min(1, expandedRegion.y0 / Math.max(1, pageCanvas.height))),
+              sortY: expandedRegion.y0 / Math.max(1, pageCanvas.height),
               isFooter: false,
               isPageHeader: false,
             });
