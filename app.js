@@ -496,6 +496,128 @@ function expandRegionToContent(canvas, region, textRegions = [], maxGrowOverride
   return { ...region, x0, y0, x1, y1, area: Math.max(1, (x1 - x0) * (y1 - y0)) };
 }
 
+function buildTextMask(width, height, textRegions = []) {
+  const mask = new Uint8Array(width * height);
+  for (const t of textRegions) {
+    const x0 = Math.max(0, Math.floor(t.x0));
+    const y0 = Math.max(0, Math.floor(t.y0));
+    const x1 = Math.min(width, Math.ceil(t.x1));
+    const y1 = Math.min(height, Math.ceil(t.y1));
+    for (let y = y0; y < y1; y += 1) {
+      const row = y * width;
+      for (let x = x0; x < x1; x += 1) mask[row + x] = 1;
+    }
+  }
+  return mask;
+}
+
+function trimRegionTextEdges(canvas, region, textRegions = []) {
+  const ctx = canvas.getContext('2d');
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const { data } = imageData;
+  const textMask = buildTextMask(width, height, textRegions);
+
+  let x0 = Math.max(0, Math.floor(region.x0));
+  let y0 = Math.max(0, Math.floor(region.y0));
+  let x1 = Math.min(width, Math.ceil(region.x1));
+  let y1 = Math.min(height, Math.ceil(region.y1));
+
+  const minWidth = Math.max(40, Math.round(width * 0.12));
+  const minHeight = Math.max(40, Math.round(height * 0.12));
+  const maxTrimX = Math.max(14, Math.round((x1 - x0) * 0.24));
+  const maxTrimY = Math.max(14, Math.round((y1 - y0) * 0.24));
+  const trimStep = 4;
+  let trimmedLeft = 0;
+  let trimmedRight = 0;
+  let trimmedTop = 0;
+  let trimmedBottom = 0;
+
+  function isInkPixel(pixelIndex) {
+    const i = pixelIndex * 4;
+    const alpha = data[i + 3];
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const nearWhite = r > 247 && g > 247 && b > 247;
+    return alpha > 24 && !nearWhite;
+  }
+
+  function sideStats(side, stripSize) {
+    let ink = 0;
+    let textInk = 0;
+    let visualInk = 0;
+
+    if (side === 'left' || side === 'right') {
+      const startX = side === 'left' ? x0 : Math.max(x0, x1 - stripSize);
+      const endX = side === 'left' ? Math.min(x1, x0 + stripSize) : x1;
+      for (let y = y0; y < y1; y += 1) {
+        const row = y * width;
+        for (let x = startX; x < endX; x += 1) {
+          const p = row + x;
+          if (!isInkPixel(p)) continue;
+          ink += 1;
+          if (textMask[p]) textInk += 1;
+          else visualInk += 1;
+        }
+      }
+    } else {
+      const startY = side === 'top' ? y0 : Math.max(y0, y1 - stripSize);
+      const endY = side === 'top' ? Math.min(y1, y0 + stripSize) : y1;
+      for (let y = startY; y < endY; y += 1) {
+        const row = y * width;
+        for (let x = x0; x < x1; x += 1) {
+          const p = row + x;
+          if (!isInkPixel(p)) continue;
+          ink += 1;
+          if (textMask[p]) textInk += 1;
+          else visualInk += 1;
+        }
+      }
+    }
+
+    return { ink, textInk, visualInk };
+  }
+
+  function shouldTrim(side) {
+    const strip = Math.min(trimStep * 2, side === 'left' || side === 'right' ? x1 - x0 : y1 - y0);
+    if (strip <= 0) return false;
+    const { ink, textInk, visualInk } = sideStats(side, strip);
+    if (ink < 24) return false;
+    const textShare = textInk / ink;
+    const visualShare = visualInk / ink;
+    return textShare >= 0.62 && visualShare <= 0.28;
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    if (x1 - x0 > minWidth && trimmedLeft < maxTrimX && shouldTrim('left')) {
+      x0 = Math.min(x1 - minWidth, x0 + trimStep);
+      trimmedLeft += trimStep;
+      changed = true;
+    }
+    if (x1 - x0 > minWidth && trimmedRight < maxTrimX && shouldTrim('right')) {
+      x1 = Math.max(x0 + minWidth, x1 - trimStep);
+      trimmedRight += trimStep;
+      changed = true;
+    }
+    if (y1 - y0 > minHeight && trimmedTop < maxTrimY && shouldTrim('top')) {
+      y0 = Math.min(y1 - minHeight, y0 + trimStep);
+      trimmedTop += trimStep;
+      changed = true;
+    }
+    if (y1 - y0 > minHeight && trimmedBottom < maxTrimY && shouldTrim('bottom')) {
+      y1 = Math.max(y0 + minHeight, y1 - trimStep);
+      trimmedBottom += trimStep;
+      changed = true;
+    }
+  }
+
+  return { ...region, x0, y0, x1, y1, area: Math.max(1, (x1 - x0) * (y1 - y0)) };
+}
+
 // expandRegionToContent only grows toward unmasked ("non-text") pixels, so a
 // caption sitting right next to a figure (e.g. an axis label like "Y=128")
 // gets sliced in half instead of cleanly included or excluded — its masked
@@ -504,6 +626,24 @@ function expandRegionToContent(canvas, region, textRegions = [], maxGrowOverride
 // outside the region and are caption-sized (not a stray nearby paragraph).
 function growRegionWithNearbyLabels(region, textRegions, maxGap = 10) {
   let { x0, y0, x1, y1 } = region;
+  const start = { x0, y0, x1, y1 };
+  const startWidth = Math.max(1, start.x1 - start.x0);
+  const startHeight = Math.max(1, start.y1 - start.y0);
+  const maxExpandX = Math.max(14, Math.min(86, Math.round(startWidth * 0.32)));
+  const maxExpandY = Math.max(14, Math.min(96, Math.round(startHeight * 0.34)));
+
+  function intersectionSize(a0, a1, b0, b1) {
+    return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+  }
+
+  function canExpandTo(candidate) {
+    const growLeft = Math.max(0, start.x0 - candidate.x0);
+    const growTop = Math.max(0, start.y0 - candidate.y0);
+    const growRight = Math.max(0, candidate.x1 - start.x1);
+    const growBottom = Math.max(0, candidate.y1 - start.y1);
+    return growLeft <= maxExpandX && growRight <= maxExpandX && growTop <= maxExpandY && growBottom <= maxExpandY;
+  }
+
   let changed = true;
   while (changed) {
     changed = false;
@@ -515,14 +655,30 @@ function growRegionWithNearbyLabels(region, textRegions, maxGap = 10) {
       // size (not relative to the region, which can start out very small,
       // e.g. just an icon) — wide enough for a typeset formula line, but
       // well short of a full bullet/paragraph line of body text.
-      if (boxHeight > 110 || boxWidth > 420) continue;
+      if (boxHeight > 92 || boxWidth > 260) continue;
       const overlapsX = t.x1 >= x0 - maxGap && t.x0 <= x1 + maxGap;
       const overlapsY = t.y1 >= y0 - maxGap && t.y0 <= y1 + maxGap;
       if (!overlapsX || !overlapsY) continue;
+
+      const overlapW = intersectionSize(x0, x1, t.x0, t.x1);
+      const overlapH = intersectionSize(y0, y1, t.y0, t.y1);
+      const overlapXRatio = overlapW / Math.max(1, boxWidth);
+      const overlapYRatio = overlapH / Math.max(1, boxHeight);
+      const horizontalGap = Math.max(0, Math.max(x0 - t.x1, t.x0 - x1));
+      const verticalGap = Math.max(0, Math.max(y0 - t.y1, t.y0 - y1));
+
+      const stronglyAligned = (overlapXRatio >= 0.58 && verticalGap <= maxGap)
+        || (overlapYRatio >= 0.58 && horizontalGap <= maxGap);
+      if (!stronglyAligned) continue;
+
       const newX0 = Math.min(x0, t.x0);
       const newY0 = Math.min(y0, t.y0);
       const newX1 = Math.max(x1, t.x1);
       const newY1 = Math.max(y1, t.y1);
+
+      const candidate = { x0: newX0, y0: newY0, x1: newX1, y1: newY1 };
+      if (!canExpandTo(candidate)) continue;
+
       if (newX0 !== x0 || newY0 !== y0 || newX1 !== x1 || newY1 !== y1) {
         x0 = newX0; y0 = newY0; x1 = newX1; y1 = newY1;
         changed = true;
@@ -621,9 +777,9 @@ function regionPassesHardFilter(region, canvasWidth, canvasHeight, textRegions, 
     if (areaRatio < 0.008 || areaRatio > 0.82) return false;
     if (widthRatio < 0.1 || heightRatio < 0.08) return false;
     const isCleanlyIsolated = touchedEdges === 0 && textOverlapRatio < 0.05;
-    if (fillRatio < (isCleanlyIsolated ? 0.04 : 0.35)) return false;
+    if (fillRatio < (isCleanlyIsolated ? 0.08 : 0.42)) return false;
     if (aspect < 0.22 || aspect > 4.8) return false;
-    if (textOverlapRatio > 0.5) return false;
+    if (textOverlapRatio > 0.36) return false;
     if (touchedEdges >= 3) return false;
     if (centerXRatio < 0.12) return false;
     return true;
@@ -1212,18 +1368,19 @@ async function handleFile(file) {
           for (const region of regionsToRender) {
             const grownRegion = expandRegionToContent(pageCanvas, region, textRegions);
             const expandedRegion = growRegionWithNearbyLabels(grownRegion, textRegions);
-            console.log(`[img-debug] p${pageNumber}: region=${JSON.stringify({ x0: region.x0, y0: region.y0, x1: region.x1, y1: region.y1 })} grown=${JSON.stringify({ x0: grownRegion.x0, y0: grownRegion.y0, x1: grownRegion.x1, y1: grownRegion.y1 })} withLabels=${JSON.stringify({ x0: expandedRegion.x0, y0: expandedRegion.y0, x1: expandedRegion.x1, y1: expandedRegion.y1 })}`);
+            const trimmedRegion = trimRegionTextEdges(pageCanvas, expandedRegion, textRegions);
+            console.log(`[img-debug] p${pageNumber}: region=${JSON.stringify({ x0: region.x0, y0: region.y0, x1: region.x1, y1: region.y1 })} grown=${JSON.stringify({ x0: grownRegion.x0, y0: grownRegion.y0, x1: grownRegion.x1, y1: grownRegion.y1 })} withLabels=${JSON.stringify({ x0: expandedRegion.x0, y0: expandedRegion.y0, x1: expandedRegion.x1, y1: expandedRegion.y1 })} trimmed=${JSON.stringify({ x0: trimmedRegion.x0, y0: trimmedRegion.y0, x1: trimmedRegion.x1, y1: trimmedRegion.y1 })}`);
             console.log(`[img-debug] p${pageNumber}: nearbyTextBoxes(top of grown, y0-150..y0)=${JSON.stringify(textRegions.filter(t => t.y1 >= grownRegion.y0 - 150 && t.y0 <= grownRegion.y0 + 20).map(t => ({ x0: t.x0, y0: t.y0, x1: t.x1, y1: t.y1 })))}`);
-            const regionCanvas = createCanvasRegion(pageCanvas, expandedRegion, 10);
-            keptImageCanvasRegions.push(expandedRegion);
+            const regionCanvas = createCanvasRegion(pageCanvas, trimmedRegion, 10);
+            keptImageCanvasRegions.push(trimmedRegion);
             pageImageBlocks.push({
               isImage: true,
               imageDataUrl: regionCanvas.toDataURL('image/png'),
               imageLandscape: regionCanvas.width > regionCanvas.height * 1.05,
               imageWidthRatio: Math.max(0.18, Math.min(1, regionCanvas.width / Math.max(1, pageCanvas.width))),
-              imageXRatio: Math.max(0, Math.min(1, expandedRegion.x0 / Math.max(1, pageCanvas.width))),
-              imageYRatio: Math.max(0, Math.min(1, expandedRegion.y0 / Math.max(1, pageCanvas.height))),
-              sortY: expandedRegion.y0 / Math.max(1, pageCanvas.height),
+              imageXRatio: Math.max(0, Math.min(1, trimmedRegion.x0 / Math.max(1, pageCanvas.width))),
+              imageYRatio: Math.max(0, Math.min(1, trimmedRegion.y0 / Math.max(1, pageCanvas.height))),
+              sortY: trimmedRegion.y0 / Math.max(1, pageCanvas.height),
               isFooter: false,
               isPageHeader: false,
             });
@@ -1245,18 +1402,19 @@ async function handleFile(file) {
             // without being enough to cross a real banner/paragraph gap.
             const grownRegion = expandRegionToContent(pageCanvas, fallbackRegion, textRegions, 22);
             const expandedRegion = growRegionWithNearbyLabels(grownRegion, textRegions);
-            const regionCanvas = createCanvasRegion(pageCanvas, expandedRegion, 12);
+            const trimmedRegion = trimRegionTextEdges(pageCanvas, expandedRegion, textRegions);
+            const regionCanvas = createCanvasRegion(pageCanvas, trimmedRegion, 12);
             const dataUrl = regionCanvas.toDataURL('image/png');
-            console.log(`[img-debug] p${pageNumber}: fallback push regionCanvas=${regionCanvas.width}x${regionCanvas.height} dataUrlLen=${dataUrl.length} expandedRegion=${JSON.stringify(expandedRegion)}`);
-            keptImageCanvasRegions.push(expandedRegion);
+            console.log(`[img-debug] p${pageNumber}: fallback push regionCanvas=${regionCanvas.width}x${regionCanvas.height} dataUrlLen=${dataUrl.length} expandedRegion=${JSON.stringify(expandedRegion)} trimmedRegion=${JSON.stringify(trimmedRegion)}`);
+            keptImageCanvasRegions.push(trimmedRegion);
             pageImageBlocks.push({
               isImage: true,
               imageDataUrl: dataUrl,
               imageLandscape: regionCanvas.width > regionCanvas.height * 1.05,
               imageWidthRatio: Math.max(0.2, Math.min(1, regionCanvas.width / Math.max(1, pageCanvas.width))),
-              imageXRatio: Math.max(0, Math.min(1, expandedRegion.x0 / Math.max(1, pageCanvas.width))),
-              imageYRatio: Math.max(0, Math.min(1, expandedRegion.y0 / Math.max(1, pageCanvas.height))),
-              sortY: expandedRegion.y0 / Math.max(1, pageCanvas.height),
+              imageXRatio: Math.max(0, Math.min(1, trimmedRegion.x0 / Math.max(1, pageCanvas.width))),
+              imageYRatio: Math.max(0, Math.min(1, trimmedRegion.y0 / Math.max(1, pageCanvas.height))),
+              sortY: trimmedRegion.y0 / Math.max(1, pageCanvas.height),
               isFooter: false,
               isPageHeader: false,
             });
