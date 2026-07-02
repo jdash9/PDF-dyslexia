@@ -54,11 +54,27 @@ function itemsToLines(items, styles, viewport) {
   const bands = [];
   for (const element of elements) {
     const last = bands[bands.length - 1];
-    if (!last || last.y - element.y > element.sz * 0.55) {
-      bands.push({ y: element.y, sz: element.sz, els: [element] });
-    } else {
+    let merge = false;
+    if (last && last.y - element.y <= element.sz * 0.55) {
+      // Also require horizontal continuity: two elements can share a Y-band by
+      // coincidence (e.g. body text on the left and an unrelated diagram
+      // label on the right sitting at nearly the same height) without
+      // actually belonging to the same line of text. Elements are sorted by Y
+      // first, so a slightly-higher-Y element (e.g. the label) can end up
+      // processed before a slightly-lower-Y one (e.g. the body text) even
+      // though it "reads" to the right — check the gap in both directions,
+      // not just whether the new element extends past the band's right edge.
+      const bandMinX = Math.min(...last.els.map(el => el.x));
+      const bandMaxX = Math.max(...last.els.map(el => el.x + el.w));
+      const gapThreshold = Math.max(element.sz * 6, 50);
+      const gap = Math.max(0, bandMinX - (element.x + element.w), element.x - bandMaxX);
+      if (gap <= gapThreshold) merge = true;
+    }
+    if (merge) {
       last.sz = Math.max(last.sz, element.sz);
       last.els.push(element);
+    } else {
+      bands.push({ y: element.y, sz: element.sz, els: [element] });
     }
   }
 
@@ -94,10 +110,6 @@ function itemsToLines(items, styles, viewport) {
 
     const totalChars = text.length;
     if (totalChars > 0 && symbolChars === totalChars) continue;
-
-    const normalized = text.replace(/\s/g, '');
-    const alphaCount = (normalized.match(/[a-zA-Z]/g) || []).length;
-    if (normalized.length > 5 && alphaCount / normalized.length < 0.25) continue;
 
     text = stripGarbledTail(text);
     if (!text) continue;
@@ -155,7 +167,7 @@ function mergeListContinuations(lines) {
     let combined = line.text;
     while (i + 1 < lines.length) {
       const next = lines[i + 1];
-      if (next.isPageDiv || next.isFooter || next.isPageHeader) break;
+      if (next.isPageDiv || next.isFooter || next.isPageHeader || next.isImage) break;
       if (next.para || next.isBullet || next.isNumbered || next.isCode) break;
       if (next.factor > 1.18) break;
       if (next.indent > (line.indent || 0) + 1) break;

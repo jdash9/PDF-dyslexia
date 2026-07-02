@@ -418,7 +418,7 @@ function createCanvasRegion(sourceCanvas, region, padding = 8) {
   return outputCanvas;
 }
 
-function expandRegionToContent(canvas, region, textRegions = []) {
+function expandRegionToContent(canvas, region, textRegions = [], maxGrowOverride = null) {
   const ctx = canvas.getContext('2d');
   const { width, height } = canvas;
   const imageData = ctx.getImageData(0, 0, width, height);
@@ -452,7 +452,7 @@ function expandRegionToContent(canvas, region, textRegions = []) {
   let x1 = Math.min(width, Math.ceil(region.x1));
   let y1 = Math.min(height, Math.ceil(region.y1));
 
-  const maxGrow = Math.max(18, Math.round(Math.min(width, height) * 0.09));
+  const maxGrow = maxGrowOverride ?? Math.max(18, Math.round(Math.min(width, height) * 0.09));
 
   for (let step = 0; step < maxGrow; step += 1) {
     let grew = false;
@@ -493,6 +493,42 @@ function expandRegionToContent(canvas, region, textRegions = []) {
     if (!grew) break;
   }
 
+  return { ...region, x0, y0, x1, y1, area: Math.max(1, (x1 - x0) * (y1 - y0)) };
+}
+
+// expandRegionToContent only grows toward unmasked ("non-text") pixels, so a
+// caption sitting right next to a figure (e.g. an axis label like "Y=128")
+// gets sliced in half instead of cleanly included or excluded — its masked
+// core doesn't count as growth fuel, only its antialiased edge does. Since we
+// already know each text item's exact box, pull in ones that sit just
+// outside the region and are caption-sized (not a stray nearby paragraph).
+function growRegionWithNearbyLabels(region, textRegions, maxGap = 10) {
+  let { x0, y0, x1, y1 } = region;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const t of textRegions) {
+      const boxWidth = t.x1 - t.x0;
+      const boxHeight = t.y1 - t.y0;
+      // Large typeset formulas run taller than a normal caption, so the
+      // height cap is generous. The width cap is an absolute figure-caption
+      // size (not relative to the region, which can start out very small,
+      // e.g. just an icon) — wide enough for a typeset formula line, but
+      // well short of a full bullet/paragraph line of body text.
+      if (boxHeight > 110 || boxWidth > 420) continue;
+      const overlapsX = t.x1 >= x0 - maxGap && t.x0 <= x1 + maxGap;
+      const overlapsY = t.y1 >= y0 - maxGap && t.y0 <= y1 + maxGap;
+      if (!overlapsX || !overlapsY) continue;
+      const newX0 = Math.min(x0, t.x0);
+      const newY0 = Math.min(y0, t.y0);
+      const newX1 = Math.max(x1, t.x1);
+      const newY1 = Math.max(y1, t.y1);
+      if (newX0 !== x0 || newY0 !== y0 || newX1 !== x1 || newY1 !== y1) {
+        x0 = newX0; y0 = newY0; x1 = newX1; y1 = newY1;
+        changed = true;
+      }
+    }
+  }
   return { ...region, x0, y0, x1, y1, area: Math.max(1, (x1 - x0) * (y1 - y0)) };
 }
 
@@ -571,11 +607,23 @@ function regionPassesHardFilter(region, canvasWidth, canvasHeight, textRegions, 
   const touchedEdges = countTouchedEdges(region, canvasWidth, canvasHeight);
 
   if (strictMode) {
-    if (areaRatio < 0.07 || areaRatio > 0.82) return false;
-    if (widthRatio < 0.22 || heightRatio < 0.18) return false;
-    if (fillRatio < 0.22) return false;
+    // Small, dense, self-contained elements (an icon, a labeled diagram box)
+    // must also be recognized as images, not just one big central figure —
+    // so the size floor is low, and the text-overlap allowance is generous
+    // because a real diagram box legitimately has its own caption drawn on
+    // it. fillRatio alone can't reliably separate "leaked/merged body text"
+    // from "genuine but visually sparse art" (thin line art or stylized
+    // lettering has a lot of negative space too) — but a region that touches
+    // no page edge and barely overlaps real text is strong independent
+    // evidence it's a clean, self-contained figure, so it gets a much lower
+    // density floor. A region touching an edge or overlapping text more
+    // needs to be much denser to still count as a real image.
+    if (areaRatio < 0.008 || areaRatio > 0.82) return false;
+    if (widthRatio < 0.1 || heightRatio < 0.08) return false;
+    const isCleanlyIsolated = touchedEdges === 0 && textOverlapRatio < 0.05;
+    if (fillRatio < (isCleanlyIsolated ? 0.04 : 0.35)) return false;
     if (aspect < 0.22 || aspect > 4.8) return false;
-    if (textOverlapRatio > 0.015) return false;
+    if (textOverlapRatio > 0.5) return false;
     if (touchedEdges >= 3) return false;
     if (centerXRatio < 0.12) return false;
     return true;
@@ -590,18 +638,6 @@ function regionPassesHardFilter(region, canvasWidth, canvasHeight, textRegions, 
   return true;
 }
 
-function hasStrongSecondaryRegion(sortedRegions, canvasWidth) {
-  if (!sortedRegions || sortedRegions.length < 2) return false;
-  const a = sortedRegions[0];
-  const b = sortedRegions[1];
-  const aWidth = Math.max(1, a.x1 - a.x0);
-  const bWidth = Math.max(1, b.x1 - b.x0);
-  const bAreaRatio = b.area / Math.max(1, a.area);
-  const horizontalGap = Math.abs(((a.x0 + a.x1) * 0.5) - ((b.x0 + b.x1) * 0.5));
-  const minGap = Math.max(24, Math.round(canvasWidth * 0.16));
-  return bAreaRatio >= 0.42 && bWidth > 40 && aWidth > 40 && horizontalGap >= minGap;
-}
-
 function pickBestImageRegions(regions, canvasWidth, canvasHeight, textRegions, preferSingleMainRegion) {
   if (!regions.length) return [];
 
@@ -610,15 +646,34 @@ function pickBestImageRegions(regions, canvasWidth, canvasHeight, textRegions, p
   if (!filtered.length) return [];
 
   const sorted = [...filtered].sort((a, b) => scoreImageRegion(b, canvasWidth) - scoreImageRegion(a, canvasWidth));
-  if (preferSingleMainRegion) {
-    if (hasStrongSecondaryRegion(sorted, canvasWidth)) return sorted.slice(0, 2);
-    return [sorted[0]];
-  }
-  return sorted.slice(0, 2);
+  // Each candidate here has already individually passed the hard filter (good
+  // density, sane size/aspect, not hugging page edges), so several of them
+  // can legitimately coexist — e.g. an icon plus a multi-part labeled diagram.
+  // Keep all of them (capped to avoid pathological over-splitting) rather than
+  // arbitrarily dropping all but one or two.
+  return sorted.slice(0, 5);
 }
 
 function shouldKeepRegionsForPage(selectedRegions, pageTextLines, canvasWidth, canvasHeight) {
   if (!selectedRegions.length) return false;
+
+  // A region that covers a sizeable chunk of the page but is only sparsely
+  // filled (a lot of empty space inside its bounding box) is almost always
+  // body text that leaked past masking and got merged into the region, not a
+  // genuine image — reject it so the text below isn't duplicated as an image.
+  // A dense, solid region (e.g. a real photo/illustration/banner) is kept
+  // even if it's large.
+  if ((pageTextLines || []).length > 2) {
+    const hasSparseBlob = selectedRegions.some(region => {
+      const boxWidth = Math.max(1, region.x1 - region.x0);
+      const boxHeight = Math.max(1, region.y1 - region.y0);
+      const boxAreaRatio = (boxWidth * boxHeight) / Math.max(1, canvasWidth * canvasHeight);
+      const fillRatio = region.area / Math.max(1, boxWidth * boxHeight);
+      return boxAreaRatio > 0.3 && fillRatio < 0.35;
+    });
+    if (hasSparseBlob) return false;
+  }
+
   if (selectedRegions.length >= 2) return true;
   const isLowTextPage = (pageTextLines || []).length <= 2;
   if (!isLowTextPage) return true;
@@ -780,6 +835,48 @@ function getDominantVisualRegion(canvas, textRegions = [], preferRightSide = tru
     }
   }
 
+  // A full-width decorative header banner touching the top edge makes every
+  // column "have content" near y=0, which defeats the gap search below (it
+  // can never find a clean vertical split) and drags the whole page — banner
+  // plus body text plus the real figure — into one box. Detect a thin, dense,
+  // full-width band starting at the very top and mask it out before doing
+  // any content analysis. A genuine full-bleed image (dense all the way
+  // through the scanned zone, no transition back to sparse) is left alone.
+  {
+    const zoneEnd = Math.round(height * 0.25);
+    let sawDense = false;
+    let bannerBottom = 0;
+    for (let y = 0; y < zoneEnd; y += 1) {
+      let filled = 0;
+      let sampled = 0;
+      for (let x = 0; x < width; x += 4) {
+        sampled += 1;
+        const pixel = y * width + x;
+        if (textMask[pixel]) continue;
+        const idx = pixel * 4;
+        const alpha = data[idx + 3];
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const nearWhite = r > 247 && g > 247 && b > 247;
+        if (alpha > 24 && !nearWhite) filled += 1;
+      }
+      const density = filled / Math.max(1, sampled);
+      if (density > 0.6) {
+        sawDense = true;
+        bannerBottom = y + 1;
+      } else if (sawDense) {
+        break;
+      }
+    }
+    if (sawDense && bannerBottom < zoneEnd) {
+      for (let y = 0; y < bannerBottom; y += 1) {
+        const row = y * width;
+        for (let x = 0; x < width; x += 1) textMask[row + x] = 1;
+      }
+    }
+  }
+
   function bboxForRange(startX, endX) {
     let minX = width;
     let minY = height;
@@ -811,24 +908,86 @@ function getDominantVisualRegion(canvas, textRegions = [], preferRightSide = tru
     return { x0: minX, y0: minY, x1: maxX + 1, y1: maxY + 1, area: count };
   }
 
-  const rightStart = Math.floor(width * 0.45);
-  const leftEnd = Math.floor(width * 0.55);
-  const rightBox = preferRightSide ? bboxForRange(rightStart, width) : null;
-  const leftBox = preferRightSide ? bboxForRange(0, leftEnd) : null;
   const fullBox = bboxForRange(0, width);
+  if (!fullBox) return null;
 
-  const hasStrongRight = rightBox && rightBox.area > width * height * 0.03;
-  const hasStrongLeft = leftBox && leftBox.area > width * height * 0.03;
-  const chosen = hasStrongRight && !hasStrongLeft ? rightBox : fullBox;
-  if (!chosen) return null;
+  // Find the widest real background gap inside the full content box. A genuine
+  // gap (e.g. body text next to a separate small figure) means the content is
+  // really two clusters and it's safe to keep only the right one. No gap means
+  // the content is continuous (e.g. a full-bleed image with text drawn on top
+  // of it) and must be kept whole, or its left edge gets cut off.
+  let chosen = fullBox;
+  if (preferRightSide) {
+    const colHasContent = new Uint8Array(width);
+    for (let x = fullBox.x0; x < fullBox.x1; x += 1) {
+      for (let y = fullBox.y0; y < fullBox.y1; y += 1) {
+        const pixel = y * width + x;
+        if (textMask[pixel]) continue;
+        const idx = pixel * 4;
+        const alpha = data[idx + 3];
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const nearWhite = r > 247 && g > 247 && b > 247;
+        if (alpha > 24 && !nearWhite) {
+          colHasContent[x] = 1;
+          break;
+        }
+      }
+    }
+
+    let gapStart = -1;
+    let bestGapEnd = -1;
+    let bestGapLen = 0;
+    const minGap = Math.max(10, Math.round(width * 0.03));
+    for (let x = fullBox.x0; x <= fullBox.x1; x += 1) {
+      const isGapCol = x < fullBox.x1 && !colHasContent[x];
+      if (isGapCol) {
+        if (gapStart === -1) gapStart = x;
+      } else if (gapStart !== -1) {
+        const gapLen = x - gapStart;
+        if (gapLen > bestGapLen) {
+          bestGapLen = gapLen;
+          bestGapEnd = x;
+        }
+        gapStart = -1;
+      }
+    }
+
+    if (bestGapLen >= minGap) {
+      const rightBox = bboxForRange(bestGapEnd, width);
+      if (rightBox && rightBox.area > width * height * 0.03) {
+        chosen = rightBox;
+      }
+    }
+  }
 
   const boxWidth = Math.max(1, chosen.x1 - chosen.x0);
   const boxHeight = Math.max(1, chosen.y1 - chosen.y0);
   const areaRatio = chosen.area / Math.max(1, width * height);
   const widthRatio = boxWidth / Math.max(1, width);
   const heightRatio = boxHeight / Math.max(1, height);
+  const fillRatio = chosen.area / Math.max(1, boxWidth * boxHeight);
+  const boxAreaRatio = (boxWidth * boxHeight) / Math.max(1, width * height);
 
-  if (areaRatio < 0.05 || widthRatio < 0.2 || heightRatio < 0.16) return null;
+  console.log(`[img-debug] getDominantVisualRegion: fullBox=${JSON.stringify(fullBox)} chosen=${JSON.stringify({ x0: chosen.x0, y0: chosen.y0, x1: chosen.x1, y1: chosen.y1 })} usedGapSplit=${chosen !== fullBox} areaRatio=${areaRatio.toFixed(3)} widthRatio=${widthRatio.toFixed(3)} heightRatio=${heightRatio.toFixed(3)} fillRatio=${fillRatio.toFixed(3)} boxAreaRatio=${boxAreaRatio.toFixed(3)}`);
+
+  if (areaRatio < 0.05 || widthRatio < 0.2 || heightRatio < 0.16) {
+    console.log('[img-debug] getDominantVisualRegion: rejected by min-size floor');
+    return null;
+  }
+  // A box that spans a large chunk of the page but is only sparsely filled
+  // (e.g. a thin decorative header banner whose bounding box happens to
+  // stretch all the way down to a stray shadow/logo pixel near the bottom,
+  // with properly-masked body text in between) isn't a real image — it's
+  // mostly just page background. Reject it instead of dragging the whole
+  // text area along as a redundant "image". Gate on the box's own footprint
+  // (boxAreaRatio), not on areaRatio, since a sparse box has a low pixel
+  // count even when its bounding box covers most of the page.
+  if (boxAreaRatio > 0.3 && fillRatio < 0.35) {
+    console.log('[img-debug] getDominantVisualRegion: rejected by sparse-blob check');
+    return null;
+  }
   return chosen;
 }
 
@@ -882,7 +1041,7 @@ async function runOcrForPage(page, pageNumber, totalPages) {
   const ocrReady = await ensureOcrEngine();
   if (!ocrReady) return [];
 
-  const canvas = await renderPdfPageToCanvas(page);
+  const canvas = await renderPdfPageToCanvas(page, 1.6);
   const languages = ['deu+eng', 'eng'];
 
   for (const language of languages) {
@@ -905,9 +1064,9 @@ async function runOcrForPage(page, pageNumber, totalPages) {
       resetOcrProgress();
       const text = result?.data?.text || '';
       if (isComplexOcrText(text)) {
-        return { type: 'empty' };
+        return { type: 'empty', ocrData: result?.data };
       }
-      return { type: 'text', lines: buildOcrLines(text) };
+      return { type: 'text', lines: buildOcrLines(text), ocrData: result?.data };
     } catch (error) {
       console.warn(`OCR failed for ${language}:`, error);
     }
@@ -961,6 +1120,11 @@ async function handleFile(file) {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
+    const firstPage = await pdf.getPage(1);
+    const firstPageViewport = firstPage.getViewport({ scale: 1 });
+    pageOrientation = firstPageViewport.width > firstPageViewport.height ? 'landscape' : 'portrait';
+    updateOrientationButton();
+
     let lines = [];
     let usedOcr = false;
     let preservedImagePages = 0;
@@ -995,6 +1159,7 @@ async function handleFile(file) {
           pageTextLines = ocrResult.lines;
           usedTextFlow = true;
         }
+        ocrData = ocrResult.ocrData || null;
       }
 
       if (pageTextLines.length) {
@@ -1003,15 +1168,54 @@ async function handleFile(file) {
         pageTextLines = dedupePageTextLines(pageTextLines);
       }
 
+      const keptImageCanvasRegions = [];
+
       if (hasEmbeddedImages) {
         const pageCanvas = await renderPageCanvas(page, 1.6, ocrData || null);
         const textRegions = buildTextRegionsFromItems(content.items, viewport, 1.6);
         const regions = detectImageRegionsFromCanvas(pageCanvas, textRegions);
         const selectedRegions = pickBestImageRegions(regions, pageCanvas.width, pageCanvas.height, textRegions, pageTextLines.length > 0);
-        if (shouldKeepRegionsForPage(selectedRegions, pageTextLines, pageCanvas.width, pageCanvas.height)) {
-          for (const region of selectedRegions) {
-            const expandedRegion = expandRegionToContent(pageCanvas, region, textRegions);
+        const describeRegion = r => ({
+          x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1,
+          areaRatio: +(r.area / Math.max(1, pageCanvas.width * pageCanvas.height)).toFixed(3),
+          widthRatio: +((r.x1 - r.x0) / Math.max(1, pageCanvas.width)).toFixed(3),
+          heightRatio: +((r.y1 - r.y0) / Math.max(1, pageCanvas.height)).toFixed(3),
+          fillRatio: +(r.area / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0))).toFixed(3),
+          touchedEdges: countTouchedEdges(r, pageCanvas.width, pageCanvas.height),
+          textOverlapRatio: +estimateTextOverlapRatio(r, textRegions).toFixed(3),
+        });
+        console.log(`[img-debug] p${pageNumber}: canvas=${pageCanvas.width}x${pageCanvas.height} textRegions=${textRegions.length} pageTextLines=${pageTextLines.length} rawRegions=${regions.length} JSON=${JSON.stringify(regions.map(describeRegion))}`);
+        console.log(`[img-debug] p${pageNumber}: selectedRegions=${selectedRegions.length} JSON=${JSON.stringify(selectedRegions.map(describeRegion))}`);
+        const keepPrimary = shouldKeepRegionsForPage(selectedRegions, pageTextLines, pageCanvas.width, pageCanvas.height);
+        console.log(`[img-debug] p${pageNumber}: keepPrimary=${keepPrimary}`);
+        if (keepPrimary) {
+          // Several independently-validated regions on the same page are
+          // overwhelmingly likely to be parts of one figure (a multi-box
+          // diagram, a grid of small tiles, ...) — render them as one
+          // combined image, which also picks up thin connectors like arrows
+          // between them since the crop is just the raw pixels of that area.
+          // Splitting them up tends to scatter a single figure into a
+          // disconnected, wrongly-ordered mess, which is worse than
+          // occasionally pulling in a small unrelated icon along the way.
+          let regionsToRender = selectedRegions;
+          if (selectedRegions.length > 1) {
+            const envelope = selectedRegions.reduce((acc, r) => ({
+              x0: Math.min(acc.x0, r.x0),
+              y0: Math.min(acc.y0, r.y0),
+              x1: Math.max(acc.x1, r.x1),
+              y1: Math.max(acc.y1, r.y1),
+              area: acc.area + r.area,
+            }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, area: 0 });
+            const envelopeAreaRatio = ((envelope.x1 - envelope.x0) * (envelope.y1 - envelope.y0)) / Math.max(1, pageCanvas.width * pageCanvas.height);
+            regionsToRender = envelopeAreaRatio <= 0.75 ? [envelope] : selectedRegions;
+          }
+          for (const region of regionsToRender) {
+            const grownRegion = expandRegionToContent(pageCanvas, region, textRegions);
+            const expandedRegion = growRegionWithNearbyLabels(grownRegion, textRegions);
+            console.log(`[img-debug] p${pageNumber}: region=${JSON.stringify({ x0: region.x0, y0: region.y0, x1: region.x1, y1: region.y1 })} grown=${JSON.stringify({ x0: grownRegion.x0, y0: grownRegion.y0, x1: grownRegion.x1, y1: grownRegion.y1 })} withLabels=${JSON.stringify({ x0: expandedRegion.x0, y0: expandedRegion.y0, x1: expandedRegion.x1, y1: expandedRegion.y1 })}`);
+            console.log(`[img-debug] p${pageNumber}: nearbyTextBoxes(top of grown, y0-150..y0)=${JSON.stringify(textRegions.filter(t => t.y1 >= grownRegion.y0 - 150 && t.y0 <= grownRegion.y0 + 20).map(t => ({ x0: t.x0, y0: t.y0, x1: t.x1, y1: t.y1 })))}`);
             const regionCanvas = createCanvasRegion(pageCanvas, expandedRegion, 10);
+            keptImageCanvasRegions.push(expandedRegion);
             pageImageBlocks.push({
               isImage: true,
               imageDataUrl: regionCanvas.toDataURL('image/png'),
@@ -1028,12 +1232,26 @@ async function handleFile(file) {
           const textStats = getPageTextStats(pageTextLines);
           const isLowTextPage = textStats.lineCount <= 3 && textStats.charCount <= 42;
           const fallbackRegion = getDominantVisualRegion(pageCanvas, textRegions, true);
+          console.log(`[img-debug] p${pageNumber}: fallback textStats=${JSON.stringify(textStats)} isLowTextPage=${isLowTextPage} fallbackRegion=${JSON.stringify(fallbackRegion ? describeRegion(fallbackRegion) : null)}`);
           if (fallbackRegion) {
-            const expandedRegion = expandRegionToContent(pageCanvas, fallbackRegion, textRegions);
+            // Unlike the flood-fill-detected regions above, this box already
+            // comes from a full-page pixel scan (incl. its own banner/gap
+            // handling), so growing it by the usual ~9%-of-page amount tends
+            // to regrow it right back into the banner/body text it
+            // deliberately excluded (that growth only needs ~2% of border
+            // pixels to look "visual" to keep expanding, and a banner row is
+            // ~100% "visual"). A much smaller cap still lets it pick up a
+            // close-by caption (like an axis label just outside a chart)
+            // without being enough to cross a real banner/paragraph gap.
+            const grownRegion = expandRegionToContent(pageCanvas, fallbackRegion, textRegions, 22);
+            const expandedRegion = growRegionWithNearbyLabels(grownRegion, textRegions);
             const regionCanvas = createCanvasRegion(pageCanvas, expandedRegion, 12);
+            const dataUrl = regionCanvas.toDataURL('image/png');
+            console.log(`[img-debug] p${pageNumber}: fallback push regionCanvas=${regionCanvas.width}x${regionCanvas.height} dataUrlLen=${dataUrl.length} expandedRegion=${JSON.stringify(expandedRegion)}`);
+            keptImageCanvasRegions.push(expandedRegion);
             pageImageBlocks.push({
               isImage: true,
-              imageDataUrl: regionCanvas.toDataURL('image/png'),
+              imageDataUrl: dataUrl,
               imageLandscape: regionCanvas.width > regionCanvas.height * 1.05,
               imageWidthRatio: Math.max(0.2, Math.min(1, regionCanvas.width / Math.max(1, pageCanvas.width))),
               imageXRatio: Math.max(0, Math.min(1, expandedRegion.x0 / Math.max(1, pageCanvas.width))),
@@ -1043,6 +1261,7 @@ async function handleFile(file) {
               isPageHeader: false,
             });
           } else if (isLowTextPage) {
+            keptImageCanvasRegions.push({ x0: 0, y0: 0, x1: pageCanvas.width, y1: pageCanvas.height });
             pageImageBlocks.push({
               isImage: true,
               imageDataUrl: pageCanvas.toDataURL('image/png'),
@@ -1058,6 +1277,27 @@ async function handleFile(file) {
         }
       }
 
+      console.log(`[img-debug] p${pageNumber}: before shouldPreferImageOnly, pageImageBlocks=${pageImageBlocks.length}`, JSON.stringify(pageImageBlocks.map(b => ({ w: b.imageWidthRatio, x: b.imageXRatio, y: b.imageYRatio, sortY: b.sortY, len: b.imageDataUrl?.length }))));
+
+      // Text items that sit inside a region we kept as an image (e.g. a
+      // caption baked into a diagram box, like "Medium" or a single "R"/"G"/
+      // "B" channel label) are already visible in that image — keep them out
+      // of the separate reading-text flow so they don't show up a second
+      // time as a stray standalone line.
+      if (keptImageCanvasRegions.length && pageTextLines.length) {
+        const scale = 1.6;
+        const pageHeightCanvas = pageHeight * scale;
+        pageTextLines = pageTextLines.filter(line => {
+          const cx = (line.x || 0) * scale;
+          const cyBaseline = pageHeightCanvas - (line.y || 0) * scale;
+          const sizeCanvas = (line.size || 12) * scale;
+          return !keptImageCanvasRegions.some(r => (
+            cx >= r.x0 - 8 && cx <= r.x1 + 8 &&
+            cyBaseline >= r.y0 - sizeCanvas && cyBaseline <= r.y1 + 8
+          ));
+        });
+      }
+
       if (shouldPreferImageOnly(pageTextLines, pageImageBlocks)) {
         pageTextLines = [];
       }
@@ -1070,6 +1310,8 @@ async function handleFile(file) {
       if (pageImageBlocks.length) {
         preservedImagePages += 1;
       }
+
+      console.log(`[img-debug] p${pageNumber}: final pageImageBlocks=${pageImageBlocks.length}`);
 
       const pageBlocks = [
         ...pageTextLines.map(line => ({ ...line, type: 'text', sortY: Math.max(0, Math.min(1, (pageHeight - (line.y || 0)) / Math.max(1, pageHeight))) })),
@@ -1098,6 +1340,7 @@ async function handleFile(file) {
 
     computeFactors(lines);
     docLines = mergeListContinuations(lines);
+    console.log(`[img-debug] global: lines images=${lines.filter(l => l.isImage).length} docLines images=${docLines.filter(l => l.isImage).length}`);
     renderCurrentPreview();
     const summary = usedOcr || preservedImagePages
       ? `Done — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} read${preservedImagePages ? `, with ${preservedImagePages} image page${preservedImagePages > 1 ? 's' : ''} kept as images` : ' with OCR fallback'}. Adjust the settings and export.`
