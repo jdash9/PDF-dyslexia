@@ -1321,8 +1321,12 @@ async function handleFile(file) {
           usedOcr = true;
           pageTextLines = ocrResult.lines;
           usedTextFlow = true;
+          // Only keep the OCR boxes for masking when real text was actually
+          // recognized — on pure-image pages, Tesseract can hallucinate
+          // "text" boxes over texture/noise (brick, wood grain, holes), and
+          // masking those paints flat-color rectangles over the photo.
+          ocrData = ocrResult.ocrData || null;
         }
-        ocrData = ocrResult.ocrData || null;
       }
 
       if (pageTextLines.length) {
