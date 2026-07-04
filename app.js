@@ -1624,3 +1624,9 @@ renderCurrentPreview();
 initOpenDyslexicSupport(fontSelect, fontStatus, renderCurrentPreview);
 
 if (fontSelect.value !== 'none') handleFontChange();
+
+// Use Tiresias as the site's own interface font once it's loaded, with a
+// readable fallback until then so there's no flash of missing text.
+loadExternalFont('tiresias', 'TiresiasFont').then(ok => {
+  if (ok) document.documentElement.style.setProperty('--body', "'TiresiasFont', 'Spline Sans', system-ui, sans-serif");
+});

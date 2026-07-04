@@ -19,9 +19,8 @@ const FONT_CSS_CANDIDATES = {
     'https://fonts.cdnfonts.com/css/lexia',
   ],
   tiresias: [
-    'https://fonts.cdnfonts.com/css/tiresias-screenfont',
-    'https://fonts.cdnfonts.com/css/tiresias',
     'https://fonts.cdnfonts.com/css/tiresias-infofont',
+    'https://fonts.cdnfonts.com/css/tiresias-pcfont',
   ],
 };
 
