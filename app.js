@@ -53,6 +53,80 @@ let openDyslexicBytes = null;   // raw .ttf bytes, used for embedding in the PDF
 let fontkitLib = null;          // pdf-lib plug-in required to embed custom fonts
 let odPreviewReady = false;     // true once the font is usable in the preview
 
+/**
+ * list for specific words, which may be confused
+ * (can be extended, currently with English and German words)
+ */
+const confusableWords = {
+  "form": ["from"],
+  "from": ["form"],
+  "then": ["than"],
+  "than": ["then"],
+  "their": ["there", "they're"],
+  "there": ["their", "they're"],
+  "affect": ["effect"],
+  "effect": ["affect"],
+  "read": ["red"],
+  "red": ["read"],
+
+  // deutsch
+  "seid": ["seit"],
+  "seit": ["seid"],
+  "das": ["dass"],
+  "dass": ["das"],
+  "den": ["denn"],
+  "denn": ["den"],
+  "wider": ["wieder"],
+  "wieder": ["wider"],
+
+  "war": ["wahr"],
+  "wahr": ["war"],
+  "leer": ["lehr"],
+  "lehr": ["leer"],
+  "viel": ["fiel"],
+  "fiel": ["viel"],
+  "lid": ["lied"],
+  "lied": ["lid"],
+  "weise": ["waise"],
+  "waise": ["weise"],
+  "mal": ["mahl"],
+  "mahl": ["mal"],
+
+  "bald": ["ballt", "ball"],
+  "ballt": ["bald", "ball"],
+  "ball": ["bald", "ballt"],
+  "endlich": ["unendlich"],
+  "unendlich": ["endlich"],
+  "zahlen": ["zählen"],
+  "zählen": ["zahlen"],
+  "kennen": ["können"],
+  "können": ["kennen"],
+  "halten": ["falten"],
+  "falten": ["halten"],
+  "miete": ["mitte"],
+  "mitte": ["miete"],
+
+
+  "lesen": ["lösen"],
+  "lösen": ["lesen"],
+  "kind": ["kindl"],
+  "kindl": ["kind"],
+  "mutter": ["muster"],
+  "muster": ["mutter"],
+  "boden": ["bogen"],
+  "bogen": ["boden"],
+  "brot": ["boot"],
+  "boot": ["brot"],
+  "haus": ["maus"],
+  "maus": ["haus"],
+  "wald": ["wand"],
+  "wand": ["wald"],
+  "buch": ["bauch"],
+  "bauch": ["buch"],
+  "finger": ["fenster"],
+  "fenster": ["finger"]
+}
+
 (async () => {
   // A couple of fallback URLs in case the first source is unavailable.
   const fkUrls = [
@@ -104,7 +178,8 @@ function opts(){
     letter: $('o-letter').checked,           // wider letter spacing?
     word: $('o-word').checked,               // wider word spacing?
     bg: $('o-bg').checked,                    // cream background?
-    size: parseInt(sizeEl.value, 10)          // body text size in pt
+    size: parseInt(sizeEl.value, 10),          // body text size in pt
+    confusable: $('o-confusable').checked   // enable highlighting of confusable words
   };
 }
 
@@ -196,6 +271,22 @@ async function handleFile(file){
     if (/password/i.test(err && err.message || '')) msg = "The PDF is password-protected — I can't open it.";
     setStatus(msg, 'err');
   }
+}
+
+/*
+  function to highlight confusable word
+ */
+function highlightConfusables(text) {
+  return text.replace(/\b[\w']+\b/g, word => {
+    const lower = word.toLowerCase();
+
+    if (confusableWords[lower]) {
+      const suggestions = confusableWords[lower].join(", ");
+      return `<span class="confusable" title="Could be confused with: ${suggestions}">${escapeHtml(word)}</span>`;
+    }
+
+    return escapeHtml(word);
+  });
 }
 
 /* -----------------------------------------------------------------------------
@@ -306,7 +397,7 @@ function renderPreview(){
     const ws = o.word ? s * 0.18 : 0;            // word spacing
     const mt = l.para ? (o.size * 0.7) : 0;      // extra top margin for new paragraphs
     const weight = l.factor > 1.18 ? 600 : 400;
-    html += `<div style="font-size:${s}px;line-height:${lhF};letter-spacing:${cs}px;word-spacing:${ws}px;margin-top:${mt}px;font-weight:${weight};">${escapeHtml(l.text)}</div>`;
+    html += `<div style="font-size:${s}px;line-height:${lhF};letter-spacing:${cs}px;word-spacing:${ws}px;margin-top:${mt}px;font-weight:${weight};">${highlightConfusables(l.text)}</div>`;
   }
   previewEl.innerHTML = html;
 }

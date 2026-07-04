@@ -130,3 +130,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 
 /* --- Small screens --- */
 @media (max-width: 560px) { .wrap { padding: 40px 18px 80px; } .preview-page { padding: 26px 24px; } }
+
+/* style for highlighting of the confusable words */
+.confusable {
+  background: #fff3a3;
+  border-bottom: 2px dotted #bf4e30;
+  cursor: help;
+}
