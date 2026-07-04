@@ -34,6 +34,7 @@ const ocrProgressText = $('ocr-progress-text');
 const themeController = createThemeController(themeToggle);
 const exportPdf = createPdfExporter(PDFDocument, StandardFonts, rgb);
 
+let mergedLines = [];
 let docLines = [];
 let baseName = 'document';
 let zoomLevel = 1;
@@ -48,8 +49,13 @@ function getOptions() {
     word: $('o-word').checked,
     bg: $('o-bg').checked,
     size: parseInt(sizeEl.value, 10),
+    split: $('o-split').checked,
     orientation: pageOrientation,
   };
+}
+
+function rebuildDocLines() {
+  docLines = getOptions().split ? splitSentences(mergedLines) : mergedLines;
 }
 
 function syncOptStyles() {
@@ -106,6 +112,7 @@ function togglePageOrientation() {
 }
 
 function renderCurrentPreview() {
+  rebuildDocLines();
   renderPreview(docLines, getOptions(), previewEl, previewFrame);
 }
 
@@ -1497,7 +1504,8 @@ async function handleFile(file) {
     }
 
     computeFactors(lines);
-    docLines = mergeListContinuations(lines);
+    mergedLines = mergeListContinuations(lines);
+    docLines = mergedLines;
     console.log(`[img-debug] global: lines images=${lines.filter(l => l.isImage).length} docLines images=${docLines.filter(l => l.isImage).length}`);
     renderCurrentPreview();
     const summary = usedOcr || preservedImagePages
@@ -1548,6 +1556,7 @@ reset.addEventListener('click', () => {
   applyZoom();
   setStatus('', '');
   resetOcrProgress();
+  mergedLines = [];
   docLines = [];
   previewFrame.style.background = '';
   renderCurrentPreview();

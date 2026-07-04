@@ -142,6 +142,7 @@ function createPdfExporter(PDFDocument, StandardFonts, rgb) {
       const wordSpacing = options.word ? size * 0.18 : 0;
       const lineHeight = size * lineHeightFactor;
       if (line.para) y -= baseSize * lineHeightFactor * 0.5;
+      else if (line.isSentenceBreak) y -= baseSize * lineHeightFactor * 0.2;
 
       let rawText = line.text;
       if (line.isBullet) rawText = (embedded ? '• ' : '- ') + rawText;
