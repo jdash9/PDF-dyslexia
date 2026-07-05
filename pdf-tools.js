@@ -370,6 +370,66 @@ function escapeHtml(text) {
   return text.replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+// Hardcoded dictionary of words that dyslexic readers commonly mix up —
+// either homophones (their/there) or visually similar word shapes (was/saw).
+const confusableWords = {
+  there: ['their', "they're"],
+  their: ['there', "they're"],
+  "they're": ['there', 'their'],
+  your: ["you're"],
+  "you're": ['your'],
+  its: ["it's"],
+  "it's": ['its'],
+  then: ['than'],
+  than: ['then'],
+  affect: ['effect'],
+  effect: ['affect'],
+  accept: ['except'],
+  except: ['accept'],
+  weather: ['whether'],
+  whether: ['weather'],
+  where: ['were', 'wear'],
+  were: ['where', "we're"],
+  "we're": ['were'],
+  wear: ['where'],
+  quite: ['quiet'],
+  quiet: ['quite'],
+  though: ['through', 'thought'],
+  through: ['though', 'thorough'],
+  thought: ['though'],
+  thorough: ['through'],
+  lose: ['loose'],
+  loose: ['lose'],
+  of: ['off'],
+  off: ['of'],
+  which: ['witch'],
+  witch: ['which'],
+  allowed: ['aloud'],
+  aloud: ['allowed'],
+  was: ['saw'],
+  saw: ['was'],
+  from: ['form'],
+  form: ['from'],
+  how: ['who'],
+  who: ['how'],
+  no: ['on'],
+  on: ['no'],
+  bad: ['dad'],
+  dad: ['bad'],
+};
+
+function highlightConfusables(text) {
+  return text.replace(/\b[\w']+\b/g, word => {
+    const lower = word.toLowerCase();
+    const matches = confusableWords[lower];
+    if (matches) {
+      const suggestions = matches.join(', ');
+      return `<span class="confusable" title="Could be confused with: ${suggestions}">${escapeHtml(word)}</span>`;
+    }
+    return escapeHtml(word);
+  });
+}
+
 Object.assign(window, {
   itemsToLines,
   mergeListContinuations,
@@ -383,4 +443,6 @@ Object.assign(window, {
   formatFileSize,
   fmtSize,
   escapeHtml,
+  confusableWords,
+  highlightConfusables,
 });

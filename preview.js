@@ -92,13 +92,14 @@ function renderPreview(docLines, options, previewEl, previewFrame) {
     const topMargin = line.para ? options.size * 0.7 : line.isSentenceBreak ? options.size * 0.3 : 2;
     const fontWeight = line.factor > 1.18 ? 600 : 400;
     const indent = (line.isBullet || line.isNumbered) ? Math.min(line.indent || 0, 4) * 16 : 0;
+    const renderedText = options.confusable ? highlightConfusables(line.text) : escapeHtml(line.text);
 
     if (line.isBullet) {
-      html += `<div style="font-size:${size}px;line-height:${lineHeightFactor};letter-spacing:${letterSpacing}px;word-spacing:${wordSpacing}px;margin-top:${topMargin}px;font-weight:${fontWeight};padding-left:${indent + 20}px;text-indent:-20px;"><span aria-hidden="true">•&thinsp;</span>${escapeHtml(line.text)}</div>`;
+      html += `<div style="font-size:${size}px;line-height:${lineHeightFactor};letter-spacing:${letterSpacing}px;word-spacing:${wordSpacing}px;margin-top:${topMargin}px;font-weight:${fontWeight};padding-left:${indent + 20}px;text-indent:-20px;"><span aria-hidden="true">•&thinsp;</span>${renderedText}</div>`;
     } else if (line.isNumbered) {
-      html += `<div style="font-size:${size}px;line-height:${lineHeightFactor};letter-spacing:${letterSpacing}px;word-spacing:${wordSpacing}px;margin-top:${topMargin}px;font-weight:${fontWeight};padding-left:${indent + 24}px;text-indent:-24px;">${escapeHtml(line.numPrefix)}&thinsp;${escapeHtml(line.text)}</div>`;
+      html += `<div style="font-size:${size}px;line-height:${lineHeightFactor};letter-spacing:${letterSpacing}px;word-spacing:${wordSpacing}px;margin-top:${topMargin}px;font-weight:${fontWeight};padding-left:${indent + 24}px;text-indent:-24px;">${escapeHtml(line.numPrefix)}&thinsp;${renderedText}</div>`;
     } else {
-      html += `<div style="font-size:${size}px;line-height:${lineHeightFactor};letter-spacing:${letterSpacing}px;word-spacing:${wordSpacing}px;margin-top:${topMargin}px;font-weight:${fontWeight};">${escapeHtml(line.text)}</div>`;
+      html += `<div style="font-size:${size}px;line-height:${lineHeightFactor};letter-spacing:${letterSpacing}px;word-spacing:${wordSpacing}px;margin-top:${topMargin}px;font-weight:${fontWeight};">${renderedText}</div>`;
     }
 
     index++;

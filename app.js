@@ -90,23 +90,6 @@ function updateOcrProgress(percent, label = 'OCR in progress…') {
   ocrProgressLabel.textContent = label;
 }
 
-/*
-  function to highlight confusable word
- */
-function highlightConfusables(text) {
-  return text.replace(/\b[\w']+\b/g, word => {
-    const lower = word.toLowerCase();
-
-    if (confusableWords[lower]) {
-      const suggestions = confusableWords[lower].join(', ');
-      return `<span class="confusable" title="Could be confused with: ${suggestions}">${escapeHtml(word)}</span>`;
-    }
-
-    return escapeHtml(word);
-  });
-}
-
-
 function applyZoom() {
   zoomLevelEl.textContent = Math.round(zoomLevel * 100) + ' %';
   previewScaler.style.transform = `scale(${zoomLevel})`;
@@ -1153,10 +1136,7 @@ function getDominantVisualRegion(canvas, textRegions = [], preferRightSide = tru
   const fillRatio = chosen.area / Math.max(1, boxWidth * boxHeight);
   const boxAreaRatio = (boxWidth * boxHeight) / Math.max(1, width * height);
 
-  console.log(`[img-debug] getDominantVisualRegion: fullBox=${JSON.stringify(fullBox)} chosen=${JSON.stringify({ x0: chosen.x0, y0: chosen.y0, x1: chosen.x1, y1: chosen.y1 })} usedGapSplit=${chosen !== fullBox} areaRatio=${areaRatio.toFixed(3)} widthRatio=${widthRatio.toFixed(3)} heightRatio=${heightRatio.toFixed(3)} fillRatio=${fillRatio.toFixed(3)} boxAreaRatio=${boxAreaRatio.toFixed(3)}`);
-
   if (areaRatio < 0.05 || widthRatio < 0.2 || heightRatio < 0.16) {
-    console.log('[img-debug] getDominantVisualRegion: rejected by min-size floor');
     return null;
   }
   // A box that spans a large chunk of the page but is only sparsely filled
@@ -1168,7 +1148,6 @@ function getDominantVisualRegion(canvas, textRegions = [], preferRightSide = tru
   // (boxAreaRatio), not on areaRatio, since a sparse box has a low pixel
   // count even when its bounding box covers most of the page.
   if (boxAreaRatio > 0.3 && fillRatio < 0.35) {
-    console.log('[img-debug] getDominantVisualRegion: rejected by sparse-blob check');
     return null;
   }
   return chosen;
@@ -1362,19 +1341,7 @@ async function handleFile(file) {
         const textRegions = buildTextRegionsFromItems(content.items, viewport, 1.6);
         const regions = detectImageRegionsFromCanvas(pageCanvas, textRegions);
         const selectedRegions = pickBestImageRegions(regions, pageCanvas.width, pageCanvas.height, textRegions, pageTextLines.length > 0);
-        const describeRegion = r => ({
-          x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1,
-          areaRatio: +(r.area / Math.max(1, pageCanvas.width * pageCanvas.height)).toFixed(3),
-          widthRatio: +((r.x1 - r.x0) / Math.max(1, pageCanvas.width)).toFixed(3),
-          heightRatio: +((r.y1 - r.y0) / Math.max(1, pageCanvas.height)).toFixed(3),
-          fillRatio: +(r.area / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0))).toFixed(3),
-          touchedEdges: countTouchedEdges(r, pageCanvas.width, pageCanvas.height),
-          textOverlapRatio: +estimateTextOverlapRatio(r, textRegions).toFixed(3),
-        });
-        console.log(`[img-debug] p${pageNumber}: canvas=${pageCanvas.width}x${pageCanvas.height} textRegions=${textRegions.length} pageTextLines=${pageTextLines.length} rawRegions=${regions.length} JSON=${JSON.stringify(regions.map(describeRegion))}`);
-        console.log(`[img-debug] p${pageNumber}: selectedRegions=${selectedRegions.length} JSON=${JSON.stringify(selectedRegions.map(describeRegion))}`);
         const keepPrimary = shouldKeepRegionsForPage(selectedRegions, pageTextLines, pageCanvas.width, pageCanvas.height);
-        console.log(`[img-debug] p${pageNumber}: keepPrimary=${keepPrimary}`);
         if (keepPrimary) {
           // Several independently-validated regions on the same page are
           // overwhelmingly likely to be parts of one figure (a multi-box
@@ -1400,8 +1367,6 @@ async function handleFile(file) {
             const grownRegion = expandRegionToContent(pageCanvas, region, textRegions);
             const expandedRegion = growRegionWithNearbyLabels(grownRegion, textRegions);
             const trimmedRegion = trimRegionTextEdges(pageCanvas, expandedRegion, textRegions);
-            console.log(`[img-debug] p${pageNumber}: region=${JSON.stringify({ x0: region.x0, y0: region.y0, x1: region.x1, y1: region.y1 })} grown=${JSON.stringify({ x0: grownRegion.x0, y0: grownRegion.y0, x1: grownRegion.x1, y1: grownRegion.y1 })} withLabels=${JSON.stringify({ x0: expandedRegion.x0, y0: expandedRegion.y0, x1: expandedRegion.x1, y1: expandedRegion.y1 })} trimmed=${JSON.stringify({ x0: trimmedRegion.x0, y0: trimmedRegion.y0, x1: trimmedRegion.x1, y1: trimmedRegion.y1 })}`);
-            console.log(`[img-debug] p${pageNumber}: nearbyTextBoxes(top of grown, y0-150..y0)=${JSON.stringify(textRegions.filter(t => t.y1 >= grownRegion.y0 - 150 && t.y0 <= grownRegion.y0 + 20).map(t => ({ x0: t.x0, y0: t.y0, x1: t.x1, y1: t.y1 })))}`);
             const regionCanvas = createCanvasRegion(pageCanvas, trimmedRegion, 10);
             keptImageCanvasRegions.push(trimmedRegion);
             pageImageBlocks.push({
@@ -1420,7 +1385,6 @@ async function handleFile(file) {
           const textStats = getPageTextStats(pageTextLines);
           const isLowTextPage = textStats.lineCount <= 3 && textStats.charCount <= 42;
           const fallbackRegion = getDominantVisualRegion(pageCanvas, textRegions, true);
-          console.log(`[img-debug] p${pageNumber}: fallback textStats=${JSON.stringify(textStats)} isLowTextPage=${isLowTextPage} fallbackRegion=${JSON.stringify(fallbackRegion ? describeRegion(fallbackRegion) : null)}`);
           if (fallbackRegion) {
             // Unlike the flood-fill-detected regions above, this box already
             // comes from a full-page pixel scan (incl. its own banner/gap
@@ -1436,7 +1400,6 @@ async function handleFile(file) {
             const trimmedRegion = trimRegionTextEdges(pageCanvas, expandedRegion, textRegions);
             const regionCanvas = createCanvasRegion(pageCanvas, trimmedRegion, 12);
             const dataUrl = regionCanvas.toDataURL('image/png');
-            console.log(`[img-debug] p${pageNumber}: fallback push regionCanvas=${regionCanvas.width}x${regionCanvas.height} dataUrlLen=${dataUrl.length} expandedRegion=${JSON.stringify(expandedRegion)} trimmedRegion=${JSON.stringify(trimmedRegion)}`);
             keptImageCanvasRegions.push(trimmedRegion);
             pageImageBlocks.push({
               isImage: true,
@@ -1465,8 +1428,6 @@ async function handleFile(file) {
           }
         }
       }
-
-      console.log(`[img-debug] p${pageNumber}: before shouldPreferImageOnly, pageImageBlocks=${pageImageBlocks.length}`, JSON.stringify(pageImageBlocks.map(b => ({ w: b.imageWidthRatio, x: b.imageXRatio, y: b.imageYRatio, sortY: b.sortY, len: b.imageDataUrl?.length }))));
 
       // Text items that sit inside a region we kept as an image (e.g. a
       // caption baked into a diagram box, like "Medium" or a single "R"/"G"/
@@ -1500,8 +1461,6 @@ async function handleFile(file) {
         preservedImagePages += 1;
       }
 
-      console.log(`[img-debug] p${pageNumber}: final pageImageBlocks=${pageImageBlocks.length}`);
-
       const pageBlocks = [
         ...pageTextLines.map(line => ({ ...line, type: 'text', sortY: Math.max(0, Math.min(1, (pageHeight - (line.y || 0)) / Math.max(1, pageHeight))) })),
         ...pageImageBlocks.map(block => ({ ...block, type: 'image' })),
@@ -1530,7 +1489,6 @@ async function handleFile(file) {
     computeFactors(lines);
     mergedLines = mergeListContinuations(lines);
     docLines = mergedLines;
-    console.log(`[img-debug] global: lines images=${lines.filter(l => l.isImage).length} docLines images=${docLines.filter(l => l.isImage).length}`);
     renderCurrentPreview();
     const summary = usedOcr || preservedImagePages
       ? `Done — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} read${preservedImagePages ? `, with ${preservedImagePages} image page${preservedImagePages > 1 ? 's' : ''} kept as images` : ' with OCR fallback'}. Adjust the settings and export.`
