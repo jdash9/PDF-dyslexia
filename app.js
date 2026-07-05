@@ -51,6 +51,8 @@ function getOptions() {
     size: parseInt(sizeEl.value, 10),
     split: $('o-split').checked,
     orientation: pageOrientation,
+    confusable: $('o-confusable').checked,
+
   };
 }
 
@@ -87,6 +89,23 @@ function updateOcrProgress(percent, label = 'OCR in progress…') {
   ocrProgressText.textContent = safePercent + '%';
   ocrProgressLabel.textContent = label;
 }
+
+/*
+  function to highlight confusable word
+ */
+function highlightConfusables(text) {
+  return text.replace(/\b[\w']+\b/g, word => {
+    const lower = word.toLowerCase();
+
+    if (confusableWords[lower]) {
+      const suggestions = confusableWords[lower].join(', ');
+      return `<span class="confusable" title="Could be confused with: ${suggestions}">${escapeHtml(word)}</span>`;
+    }
+
+    return escapeHtml(word);
+  });
+}
+
 
 function applyZoom() {
   zoomLevelEl.textContent = Math.round(zoomLevel * 100) + ' %';
@@ -256,6 +275,7 @@ function getAverageColorForRegion(ctx, x, y, width, height) {
     b += data[i + 2];
     a += alpha;
     count += 1;
+
   }
 
   if (!count) {
