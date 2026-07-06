@@ -105,7 +105,8 @@ body::before {
   background: var(--paper);
   padding: 22px;
   display: flex; flex-direction: column; gap: 14px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* File bar */
@@ -158,7 +159,9 @@ select:focus { outline: none; border-color: var(--accent); }
 .box svg { opacity: 0; transform: scale(.5); transition: all .15s; }
 .opt input:checked ~ .box svg { opacity: 1; transform: scale(1); }
 .opt input:focus-visible ~ .box { outline: 2px solid rgba(191,78,48,.5); outline-offset: 2px; }
+.opt .txt { display: flex; flex-direction: column; }
 .opt .txt strong { font-weight: 600; font-size: 16px; }
+.opt .txt > span { font-size: 14px; font-weight: 400; color: var(--ink-soft); margin-top: 3px; }
 
 /* Size slider */
 .sizefield { margin-bottom: 16px; }
